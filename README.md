@@ -1,6 +1,6 @@
 # Luzifer / go-openssl
 
-`go-openssl` is a small library wrapping the `crypto/aes` functions in a way the output is compatible to OpenSSL. For all encryption / decryption processes AES256 is used so this library will not be able to decrypt messages generated with other than `openssl aes-256-cbc`.
+`go-openssl` is a small library wrapping the `crypto/aes` functions in a way the output is compatible to OpenSSL / CryptoJS. For all encryption / decryption processes AES256 is used so this library will not be able to decrypt messages generated with other than `openssl aes-256-cbc`. If you're using CryptoJS to process the data you also need to use AES256 on that side.
 
 ## Installation
 

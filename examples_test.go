@@ -2,7 +2,7 @@ package openssl
 
 import "fmt"
 
-func ExampleEncryptString() {
+func ExampleOpenSSL_EncryptString() {
 	plaintext := "Hello World!"
 	passphrase := "z4yH36a6zerhfE5427ZV"
 
@@ -16,7 +16,7 @@ func ExampleEncryptString() {
 	fmt.Printf("Encrypted text: %s\n", string(enc))
 }
 
-func ExampleDecryptString() {
+func ExampleOpenSSL_DecryptString() {
 	opensslEncrypted := "U2FsdGVkX19ZM5qQJGe/d5A/4pccgH+arBGTp+QnWPU="
 	passphrase := "z4yH36a6zerhfE5427ZV"
 

@@ -1,0 +1,10 @@
+language: go
+
+go:
+  - 1.7.x
+  - 1.8.x
+  - tip
+
+script:
+  - go vet
+  - go test

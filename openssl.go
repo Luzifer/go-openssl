@@ -37,6 +37,9 @@ func (o *OpenSSL) DecryptString(passphrase, encryptedBase64String string) ([]byt
 	if err != nil {
 		return nil, err
 	}
+	if len(data) < aes.BlockSize {
+		return nil, fmt.Errorf("Data is too short")
+	}
 	saltHeader := data[:aes.BlockSize]
 	if string(saltHeader[:8]) != o.openSSLSaltHeader {
 		return nil, fmt.Errorf("Does not appear to have been encrypted with OpenSSL, salt header missing.")

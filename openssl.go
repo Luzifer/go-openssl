@@ -7,9 +7,12 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 )
+
+var ErrInvalidSalt = errors.New("Salt needs to have exactly 8 byte")
 
 // OpenSSL is a helper to generate OpenSSL compatible encryption
 // with autmatic IV derivation and storage. As long as the key is known all
@@ -70,8 +73,9 @@ func (o *OpenSSL) decrypt(key, iv, data []byte) ([]byte, error) {
 }
 
 // EncryptString encrypts a string in a manner compatible to OpenSSL encryption
-// functions using AES-256-CBC as encryption algorithm. Generating salt.
-func (o *OpenSSL) EncryptString(passphrase string, plaintextString string) ([]byte, error) {
+// functions using AES-256-CBC as encryption algorithm. This function generates
+// a random salt on every execution.
+func (o *OpenSSL) EncryptString(passphrase, plaintextString string) ([]byte, error) {
 	salt := make([]byte, 8) // Generate an 8 byte salt
 	_, err := io.ReadFull(rand.Reader, salt)
 	if err != nil {
@@ -81,10 +85,20 @@ func (o *OpenSSL) EncryptString(passphrase string, plaintextString string) ([]by
 	return o.EncryptStringWithSalt(passphrase, salt, plaintextString)
 }
 
-// EncryptString encrypts a string in a manner compatible to OpenSSL encryption
-// functions using AES-256-CBC as encryption algorithm. Ability to pass custom
-// salt.
+// EncryptStringWithSalt encrypts a string in a manner compatible to OpenSSL
+// encryption functions using AES-256-CBC as encryption algorithm. The salt
+// needs to be passed in here which ensures the same result on every execution
+// on cost of a much weaker encryption as with EncryptString.
+//
+// The salt passed into this function needs to have exactly 8 byte.
+//
+// If you don't have a good reason to use this, please don't! For more information
+// see this: https://en.wikipedia.org/wiki/Salt_(cryptography)#Common_mistakes
 func (o *OpenSSL) EncryptStringWithSalt(passphrase string, salt []byte, plaintextString string) ([]byte, error) {
+	if len(salt) != 8 {
+		return nil, ErrInvalidSalt
+	}
+
 	data := make([]byte, len(plaintextString)+aes.BlockSize)
 	copy(data[0:], o.openSSLSaltHeader)
 	copy(data[8:], salt)

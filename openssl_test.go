@@ -119,3 +119,22 @@ func TestEncryptToOpenSSL(t *testing.T) {
 		t.Errorf("OpenSSL output did not match input.\nOutput was: %s", out.String())
 	}
 }
+
+func TestSaltValidation(t *testing.T) {
+	plaintext := "hallowelt"
+	passphrase := "z4yH36a6zerhfE5427ZV"
+
+	o := New()
+
+	if _, err := o.EncryptStringWithSalt(passphrase, []byte("12345"), plaintext); err != ErrInvalidSalt {
+		t.Errorf("5-character salt was accepted, needs to have 8 character")
+	}
+
+	if _, err := o.EncryptStringWithSalt(passphrase, []byte("1234567890"), plaintext); err != ErrInvalidSalt {
+		t.Errorf("10-character salt was accepted, needs to have 8 character")
+	}
+
+	if _, err := o.EncryptStringWithSalt(passphrase, []byte{0xcb, 0xd5, 0x1a, 0x3, 0x84, 0xba, 0xa8, 0xc8}, plaintext); err == ErrInvalidSalt {
+		t.Errorf("Salt with 8 byte unprintable characters was not accepted")
+	}
+}

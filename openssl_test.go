@@ -48,6 +48,50 @@ func TestEncryptToDecrypt(t *testing.T) {
 	}
 }
 
+func TestEncryptToDecryptWithCustomSalt(t *testing.T) {
+	plaintext := "hallowelt"
+	passphrase := "z4yH36a6zerhfE5427ZV"
+	salt := []byte("saltsalt")
+
+	o := New()
+
+	enc, err := o.EncryptStringWithSalt(passphrase, salt, plaintext)
+	if err != nil {
+		t.Fatalf("Test errored at encrypt: %s", err)
+	}
+
+	dec, err := o.DecryptString(passphrase, string(enc))
+	if err != nil {
+		t.Fatalf("Test errored at decrypt: %s", err)
+	}
+
+	if string(dec) != plaintext {
+		t.Errorf("Decrypted text did not match input.")
+	}
+}
+
+func TestEncryptWithSaltShouldHaveSameOutput(t *testing.T) {
+	plaintext := "outputshouldbesame"
+	passphrase := "passphrasesupersecure"
+	salt := []byte("saltsalt")
+
+	o := New()
+
+	enc1, err := o.EncryptStringWithSalt(passphrase, salt, plaintext)
+	if err != nil {
+		t.Fatalf("Test errored at encrypt: %s", err)
+	}
+
+	enc2, err := o.EncryptStringWithSalt(passphrase, salt, plaintext)
+	if err != nil {
+		t.Fatalf("Test errored at encrypt: %s", err)
+	}
+
+	if string(enc1) != string(enc2) {
+		t.Errorf("Encrypted outputs are not same.")
+	}
+}
+
 func TestEncryptToOpenSSL(t *testing.T) {
 	plaintext := "hallowelt"
 	passphrase := "z4yH36a6zerhfE5427ZV"

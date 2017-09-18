@@ -70,14 +70,21 @@ func (o *OpenSSL) decrypt(key, iv, data []byte) ([]byte, error) {
 }
 
 // EncryptString encrypts a string in a manner compatible to OpenSSL encryption
-// functions using AES-256-CBC as encryption algorithm
-func (o *OpenSSL) EncryptString(passphrase, plaintextString string) ([]byte, error) {
+// functions using AES-256-CBC as encryption algorithm. Generating salt.
+func (o *OpenSSL) EncryptString(passphrase string, plaintextString string) ([]byte, error) {
 	salt := make([]byte, 8) // Generate an 8 byte salt
 	_, err := io.ReadFull(rand.Reader, salt)
 	if err != nil {
 		return nil, err
 	}
 
+	return o.EncryptStringWithSalt(passphrase, salt, plaintextString)
+}
+
+// EncryptString encrypts a string in a manner compatible to OpenSSL encryption
+// functions using AES-256-CBC as encryption algorithm. Ability to pass custom
+// salt.
+func (o *OpenSSL) EncryptStringWithSalt(passphrase string, salt []byte, plaintextString string) ([]byte, error) {
 	data := make([]byte, len(plaintextString)+aes.BlockSize)
 	copy(data[0:], o.openSSLSaltHeader)
 	copy(data[8:], salt)

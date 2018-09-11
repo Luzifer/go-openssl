@@ -41,9 +41,9 @@ func (o OpenSSL) DecryptString(passphrase, encryptedBase64String string) ([]byte
 	return o.DecryptBytes(passphrase, []byte(encryptedBase64String))
 }
 
-var hashFuncList = []func([]byte) []byte{sha256sum, md5sum, sha1sum}
+var hashFuncList = []DigestFunc{DigestSHA256Sum, DigestMD5Sum, DigestSHA1Sum}
 
-func (o OpenSSL) decodeWithPassphrase(passphrase string, data []byte, salt []byte, hashFunc func([]byte) []byte) ([]byte, error) {
+func (o OpenSSL) decodeWithPassphrase(passphrase string, data []byte, salt []byte, hashFunc DigestFunc) ([]byte, error) {
 	creds, err := o.extractOpenSSLCreds([]byte(passphrase), salt, hashFunc)
 	if err != nil {
 		return nil, err
@@ -103,26 +103,24 @@ func (o OpenSSL) decrypt(key, iv, data []byte) ([]byte, error) {
 // functions using AES-256-CBC as encryption algorithm. This function generates
 // a random salt on every execution.
 func (o OpenSSL) EncryptBytes(passphrase string, plainData []byte) ([]byte, error) {
-	salt := make([]byte, 8) // Generate an 8 byte salt
-	_, err := io.ReadFull(rand.Reader, salt)
+	salt, err := o.GenerateSalt()
 	if err != nil {
 		return nil, err
 	}
 
-	return o.EncryptBytesWithSalt(passphrase, salt, plainData)
+	return o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, plainData, DigestSHA256Sum)
 }
 
 // EncryptString encrypts a string in a manner compatible to OpenSSL encryption
 // functions using AES-256-CBC as encryption algorithm. This function generates
 // a random salt on every execution.
 func (o OpenSSL) EncryptString(passphrase, plaintextString string) ([]byte, error) {
-	salt := make([]byte, 8) // Generate an 8 byte salt
-	_, err := io.ReadFull(rand.Reader, salt)
+	salt, err := o.GenerateSalt()
 	if err != nil {
 		return nil, err
 	}
 
-	return o.EncryptStringWithSalt(passphrase, salt, plaintextString)
+	return o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintextString), DigestSHA256Sum)
 }
 
 // EncryptStringWithSalt encrypts a string in a manner compatible to OpenSSL
@@ -134,8 +132,10 @@ func (o OpenSSL) EncryptString(passphrase, plaintextString string) ([]byte, erro
 //
 // If you don't have a good reason to use this, please don't! For more information
 // see this: https://en.wikipedia.org/wiki/Salt_(cryptography)#Common_mistakes
+//
+// Deprecated: Use EncryptBytesWithSaltAndDigestFunc instead.
 func (o OpenSSL) EncryptStringWithSalt(passphrase string, salt []byte, plaintextString string) ([]byte, error) {
-	return o.EncryptBytesWithSalt(passphrase, salt, []byte(plaintextString))
+	return o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintextString), DigestSHA256Sum)
 }
 
 // EncryptBytesWithSalt encrypts a slice of bytes in a manner compatible to OpenSSL
@@ -147,7 +147,25 @@ func (o OpenSSL) EncryptStringWithSalt(passphrase string, salt []byte, plaintext
 //
 // If you don't have a good reason to use this, please don't! For more information
 // see this: https://en.wikipedia.org/wiki/Salt_(cryptography)#Common_mistakes
+//
+// Deprecated: Use EncryptBytesWithSaltAndDigestFunc instead.
 func (o OpenSSL) EncryptBytesWithSalt(passphrase string, salt, plainData []byte) ([]byte, error) {
+	return o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, plainData, DigestSHA256Sum)
+}
+
+// EncryptBytesWithSaltAndDigestFunc encrypts a slice of bytes in a manner compatible to OpenSSL
+// encryption functions using AES-256-CBC as encryption algorithm. The salt
+// needs to be passed in here which ensures the same result on every execution
+// on cost of a much weaker encryption as with EncryptString.
+//
+// The salt passed into this function needs to have exactly 8 byte.
+//
+// The hash function corresponds to the `-md` parameter of OpenSSL. For OpenSSL pre-1.1.0c
+// DigestMD5Sum was the default, since then it is DigestSHA256Sum.
+//
+// If you don't have a good reason to use this, please don't! For more information
+// see this: https://en.wikipedia.org/wiki/Salt_(cryptography)#Common_mistakes
+func (o OpenSSL) EncryptBytesWithSaltAndDigestFunc(passphrase string, salt, plainData []byte, hashFunc DigestFunc) ([]byte, error) {
 	if len(salt) != 8 {
 		return nil, ErrInvalidSalt
 	}
@@ -157,7 +175,7 @@ func (o OpenSSL) EncryptBytesWithSalt(passphrase string, salt, plainData []byte)
 	copy(data[8:], salt)
 	copy(data[aes.BlockSize:], plainData)
 
-	creds, err := o.extractOpenSSLCreds([]byte(passphrase), salt, sha256sum)
+	creds, err := o.extractOpenSSLCreds([]byte(passphrase), salt, hashFunc)
 	if err != nil {
 		return nil, err
 	}
@@ -168,6 +186,17 @@ func (o OpenSSL) EncryptBytesWithSalt(passphrase string, salt, plainData []byte)
 	}
 
 	return []byte(base64.StdEncoding.EncodeToString(enc)), nil
+}
+
+// GenerateSalt generates a random 8 byte salt
+func (o OpenSSL) GenerateSalt() ([]byte, error) {
+	salt := make([]byte, 8) // Generate an 8 byte salt
+	_, err := io.ReadFull(rand.Reader, salt)
+	if err != nil {
+		return nil, err
+	}
+
+	return salt, nil
 }
 
 func (o OpenSSL) encrypt(key, iv, data []byte) ([]byte, error) {
@@ -190,7 +219,7 @@ func (o OpenSSL) encrypt(key, iv, data []byte) ([]byte, error) {
 // It uses the EVP_BytesToKey() method which is basically:
 // D_i = HASH^count(D_(i-1) || password || salt) where || denotes concatentaion, until there are sufficient bytes available
 // 48 bytes since we're expecting to handle AES-256, 32bytes for a key and 16bytes for the IV
-func (o OpenSSL) extractOpenSSLCreds(password, salt []byte, hashFunc func(data []byte) []byte) (openSSLCreds, error) {
+func (o OpenSSL) extractOpenSSLCreds(password, salt []byte, hashFunc DigestFunc) (openSSLCreds, error) {
 	var m []byte
 	prev := []byte{}
 	for len(m) < 48 {
@@ -200,7 +229,7 @@ func (o OpenSSL) extractOpenSSLCreds(password, salt []byte, hashFunc func(data [
 	return openSSLCreds{key: m[:32], iv: m[32:48]}, nil
 }
 
-func (o OpenSSL) hash(prev, password, salt []byte, hashFunc func(data []byte) []byte) []byte {
+func (o OpenSSL) hash(prev, password, salt []byte, hashFunc DigestFunc) []byte {
 	a := make([]byte, len(prev)+len(password)+len(salt))
 	copy(a, prev)
 	copy(a[len(prev):], password)
@@ -208,19 +237,26 @@ func (o OpenSSL) hash(prev, password, salt []byte, hashFunc func(data []byte) []
 	return hashFunc(a)
 }
 
-func sha256sum(data []byte) []byte {
-	h := sha256.New()
-	h.Write(data)
-	return h.Sum(nil)
-}
+// DigestFunc are functions to create a key from the passphrase
+type DigestFunc func([]byte) []byte
 
-func md5sum(data []byte) []byte {
+// DigestMD5Sum uses the (deprecated) pre-OpenSSL 1.1.0c MD5 digest to create the key
+func DigestMD5Sum(data []byte) []byte {
 	h := md5.New()
 	h.Write(data)
 	return h.Sum(nil)
 }
-func sha1sum(data []byte) []byte {
+
+// DigestSHA1Sum uses SHA1 digest to create the key
+func DigestSHA1Sum(data []byte) []byte {
 	h := sha1.New()
+	h.Write(data)
+	return h.Sum(nil)
+}
+
+// DigestSHA256Sum uses SHA256 digest to create the key which is the default behaviour since OpenSSL 1.1.0c
+func DigestSHA256Sum(data []byte) []byte {
+	h := sha256.New()
 	h.Write(data)
 	return h.Sum(nil)
 }

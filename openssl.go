@@ -14,6 +14,7 @@ import (
 	"io"
 )
 
+// ErrInvalidSalt is returned when a salt with a length of != 8 byte is passed
 var ErrInvalidSalt = errors.New("Salt needs to have exactly 8 byte")
 
 // OpenSSL is a helper to generate OpenSSL compatible encryption
@@ -67,7 +68,7 @@ func (o OpenSSL) DecryptBytes(passphrase string, encryptedBase64Data []byte) ([]
 	}
 	saltHeader := data[:aes.BlockSize]
 	if string(saltHeader[:8]) != o.openSSLSaltHeader {
-		return nil, fmt.Errorf("Does not appear to have been encrypted with OpenSSL, salt header missing.")
+		return nil, fmt.Errorf("Does not appear to have been encrypted with OpenSSL, salt header missing")
 	}
 	salt := saltHeader[8:]
 
@@ -84,7 +85,7 @@ func (o OpenSSL) DecryptBytes(passphrase string, encryptedBase64Data []byte) ([]
 
 func (o OpenSSL) decrypt(key, iv, data []byte) ([]byte, error) {
 	if len(data) == 0 || len(data)%aes.BlockSize != 0 {
-		return nil, fmt.Errorf("bad blocksize(%v), aes.BlockSize = %v\n", len(data), aes.BlockSize)
+		return nil, fmt.Errorf("bad blocksize(%v), aes.BlockSize = %v", len(data), aes.BlockSize)
 	}
 	c, err := aes.NewCipher(key)
 	if err != nil {
@@ -99,7 +100,7 @@ func (o OpenSSL) decrypt(key, iv, data []byte) ([]byte, error) {
 	return out, nil
 }
 
-// EncryptString encrypts a slice of bytes in a manner compatible to OpenSSL encryption
+// EncryptBytes encrypts a slice of bytes in a manner compatible to OpenSSL encryption
 // functions using AES-256-CBC as encryption algorithm. This function generates
 // a random salt on every execution.
 func (o OpenSSL) EncryptBytes(passphrase string, plainData []byte) ([]byte, error) {

@@ -6,6 +6,8 @@ import (
 	"crypto/cipher"
 	"crypto/md5"
 	"crypto/rand"
+	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -39,6 +41,16 @@ func (o OpenSSL) DecryptString(passphrase, encryptedBase64String string) ([]byte
 	return o.DecryptBytes(passphrase, []byte(encryptedBase64String))
 }
 
+var hashFuncList = []func([]byte) []byte{sha256sum, md5sum, sha1sum}
+
+func (o OpenSSL) decodeWithPassphrase(passphrase string, data []byte, salt []byte, hashFunc func([]byte) []byte) ([]byte, error) {
+	creds, err := o.extractOpenSSLCreds([]byte(passphrase), salt, hashFunc)
+	if err != nil {
+		return nil, err
+	}
+	return o.decrypt(creds.key, creds.iv, data)
+}
+
 // DecryptBytes takes a slice of bytes with base64 encoded, encrypted data to decrypt
 func (o OpenSSL) DecryptBytes(passphrase string, encryptedBase64Data []byte) ([]byte, error) {
 	data := make([]byte, base64.StdEncoding.DecodedLen(len(encryptedBase64Data)))
@@ -58,11 +70,16 @@ func (o OpenSSL) DecryptBytes(passphrase string, encryptedBase64Data []byte) ([]
 		return nil, fmt.Errorf("Does not appear to have been encrypted with OpenSSL, salt header missing.")
 	}
 	salt := saltHeader[8:]
-	creds, err := o.extractOpenSSLCreds([]byte(passphrase), salt)
-	if err != nil {
-		return nil, err
+
+	tmp := make([]byte, len(data))
+	for _, f := range hashFuncList {
+		copy(tmp, data)
+		result, err := o.decodeWithPassphrase(passphrase, tmp, salt, f)
+		if err == nil {
+			return result, nil
+		}
 	}
-	return o.decrypt(creds.key, creds.iv, data)
+	return nil, err
 }
 
 func (o OpenSSL) decrypt(key, iv, data []byte) ([]byte, error) {
@@ -140,7 +157,7 @@ func (o OpenSSL) EncryptBytesWithSalt(passphrase string, salt, plainData []byte)
 	copy(data[8:], salt)
 	copy(data[aes.BlockSize:], plainData)
 
-	creds, err := o.extractOpenSSLCreds([]byte(passphrase), salt)
+	creds, err := o.extractOpenSSLCreds([]byte(passphrase), salt, sha256sum)
 	if err != nil {
 		return nil, err
 	}
@@ -173,26 +190,37 @@ func (o OpenSSL) encrypt(key, iv, data []byte) ([]byte, error) {
 // It uses the EVP_BytesToKey() method which is basically:
 // D_i = HASH^count(D_(i-1) || password || salt) where || denotes concatentaion, until there are sufficient bytes available
 // 48 bytes since we're expecting to handle AES-256, 32bytes for a key and 16bytes for the IV
-func (o OpenSSL) extractOpenSSLCreds(password, salt []byte) (openSSLCreds, error) {
-	m := make([]byte, 48)
+func (o OpenSSL) extractOpenSSLCreds(password, salt []byte, hashFunc func(data []byte) []byte) (openSSLCreds, error) {
+	var m []byte
 	prev := []byte{}
-	for i := 0; i < 3; i++ {
-		prev = o.hash(prev, password, salt)
-		copy(m[i*16:], prev)
+	for len(m) < 48 {
+		prev = o.hash(prev, password, salt, hashFunc)
+		m = append(m, prev...)
 	}
-	return openSSLCreds{key: m[:32], iv: m[32:]}, nil
+	return openSSLCreds{key: m[:32], iv: m[32:48]}, nil
 }
 
-func (o OpenSSL) hash(prev, password, salt []byte) []byte {
+func (o OpenSSL) hash(prev, password, salt []byte, hashFunc func(data []byte) []byte) []byte {
 	a := make([]byte, len(prev)+len(password)+len(salt))
 	copy(a, prev)
 	copy(a[len(prev):], password)
 	copy(a[len(prev)+len(password):], salt)
-	return o.md5sum(a)
+	return hashFunc(a)
 }
 
-func (o *OpenSSL) md5sum(data []byte) []byte {
+func sha256sum(data []byte) []byte {
+	h := sha256.New()
+	h.Write(data)
+	return h.Sum(nil)
+}
+
+func md5sum(data []byte) []byte {
 	h := md5.New()
+	h.Write(data)
+	return h.Sum(nil)
+}
+func sha1sum(data []byte) []byte {
+	h := sha1.New()
 	h.Write(data)
 	return h.Sum(nil)
 }

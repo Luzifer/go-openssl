@@ -10,4 +10,4 @@ go:
 
 script:
   - go vet
-  - go test
+  - go test -v -bench . -cover

@@ -211,3 +211,53 @@ func TestSaltValidation(t *testing.T) {
 		t.Errorf("Salt with 8 byte unprintable characters was not accepted")
 	}
 }
+
+func benchmarkDecrypt(ciphertext string, b *testing.B) {
+	passphrase := "z4yH36a6zerhfE5427ZV"
+	o := New()
+
+	for n := 0; n < b.N; n++ {
+		o.DecryptString(passphrase, ciphertext)
+	}
+}
+
+func BenchmarkDecryptMD5(b *testing.B) {
+	benchmarkDecrypt("U2FsdGVkX19ZM5qQJGe/d5A/4pccgH+arBGTp+QnWPU=", b)
+}
+
+func BenchmarkDecryptSHA1(b *testing.B) {
+	benchmarkDecrypt("U2FsdGVkX1/Yy9kegseq2Ewd4UvjFYCpIEA1cltTA1Q=", b)
+}
+
+func BenchmarkDecryptSHA256(b *testing.B) {
+	benchmarkDecrypt("U2FsdGVkX1+O68d7BO9ibP8nB5+xtb/27IHlyjJWpl8=", b)
+}
+
+func benchmarkEncrypt(plaintext string, hashFunc DigestFunc, b *testing.B) {
+	passphrase := "z4yH36a6zerhfE5427ZV"
+	o := New()
+	salt, _ := o.GenerateSalt()
+
+	for n := 0; n < b.N; n++ {
+		o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), hashFunc)
+	}
+}
+
+func BenchmarkEncryptMD5(b *testing.B) {
+	benchmarkEncrypt("hallowelt", DigestMD5Sum, b)
+}
+
+func BenchmarkEncryptSHA1(b *testing.B) {
+	benchmarkEncrypt("hallowelt", DigestSHA1Sum, b)
+}
+
+func BenchmarkEncryptSHA256(b *testing.B) {
+	benchmarkEncrypt("hallowelt", DigestSHA256Sum, b)
+}
+
+func BenchmarkGenerateSalt(b *testing.B) {
+	o := New()
+	for n := 0; n < b.N; n++ {
+		o.GenerateSalt()
+	}
+}

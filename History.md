@@ -1,3 +1,8 @@
+# 2.0.0 / 2018-09-11
+
+  * Make digest function configurable on encrypt, add tests
+  * message digest support sha1 and sha256 (thanks @yoozoo)
+
 # 1.2.0 / 2018-04-26
 
   * Add byte-operations, remove import path comment

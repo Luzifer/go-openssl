@@ -1,10 +1,16 @@
+[![](https://badges.fyi/static/godoc/reference/5272B4)](https://godoc.org/github.com/Luzifer/go-openssl)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Luzifer/go-openssl)](https://goreportcard.com/report/github.com/Luzifer/go-openssl)
+![](https://badges.fyi/github/license/Luzifer/go-openssl)
+![](https://badges.fyi/github/latest-tag/Luzifer/go-openssl)
+[![](https://travis-ci.org/Luzifer/go-openssl.svg?branch=master)](https://travis-ci.org/Luzifer/go-openssl)
+
 # Luzifer / go-openssl
 
 `go-openssl` is a small library wrapping the `crypto/aes` functions in a way the output is compatible to OpenSSL / CryptoJS. For all encryption / decryption processes AES256 is used so this library will not be able to decrypt messages generated with other than `openssl aes-256-cbc`. If you're using CryptoJS to process the data you also need to use AES256 on that side.
 
-## OpenSSL 1.1.0
+## OpenSSL 1.1.0c compatibility
 
-With the release of OpenSSL 1.1.0c the default hashing algorithm [changed from `md5` to `sha256`](https://www.cryptopp.com/wiki/OPENSSL_EVP_BytesToKey). Using this new default breaks the en- and decryption used in this library. Currently you need to specify to use `md5` hashing when encrypting using `openssl enc -aes-256-cbc -a -k yourpassword -md md5`. Sadly using `sha256` is not a drop-in replacement and therefore needs to be implemented as a separate function following the OpenSSL source code.
+Starting with `v2.0.0` `go-openssl` generates the encryption keys using `sha256sum` algorithm. This is the default introduced in OpenSSL 1.1.0c. When encrypting data you can choose which digest method to use and therefore also continue to use `md5sum`. When decrypting OpenSSL encrypted data `md5sum`, `sha1sum` and `sha256sum` are supported.
 
 ## Installation
 
@@ -49,14 +55,14 @@ import (
 
 func main() {
   opensslEncrypted := "U2FsdGVkX19ZM5qQJGe/d5A/4pccgH+arBGTp+QnWPU="
-	passphrase := "z4yH36a6zerhfE5427ZV"
+  passphrase := "z4yH36a6zerhfE5427ZV"
 
-	o := openssl.New()
+  o := openssl.New()
 
-	dec, err := o.DecryptString(passphrase, opensslEncrypted)
-	if err != nil {
-		fmt.Printf("An error occurred: %s\n", err)
-	}
+  dec, err := o.DecryptString(passphrase, opensslEncrypted)
+  if err != nil {
+    fmt.Printf("An error occurred: %s\n", err)
+  }
 
   fmt.Printf("Decrypted text: %s\n", string(dec))
 }

@@ -1,3 +1,9 @@
+# 2.0.1 / 2018-09-18
+
+  * Add modules file
+  * Fix some linter warnings
+  * Add benchmarks
+
 # 2.0.0 / 2018-09-11
 
   * Make digest function configurable on encrypt, add tests

@@ -1,1 +1,1 @@
-module github.com/Luzifer/go-openssl
+module github.com/Luzifer/go-openssl/v2

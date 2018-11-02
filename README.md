@@ -43,7 +43,7 @@ The usage is quite simple as you don't need any special knowledge about OpenSSL 
 ```go
 import (
   "fmt"
-  "github.com/Luzifer/go-openssl"
+  openssl "gopkg.in/Luzifer/go-openssl.v3"
 )
 
 func main() {
@@ -52,7 +52,7 @@ func main() {
 
   o := openssl.New()
 
-  enc, err := o.EncryptString(passphrase, plaintext)
+  enc, err := o.EncryptBytes(passphrase, []byte(plaintext), DigestSHA256Sum)
   if err != nil {
     fmt.Printf("An error occurred: %s\n", err)
   }
@@ -66,7 +66,7 @@ func main() {
 ```go
 import (
   "fmt"
-  "github.com/Luzifer/go-openssl"
+  openssl "gopkg.in/Luzifer/go-openssl.v3"
 )
 
 func main() {
@@ -75,7 +75,7 @@ func main() {
 
   o := openssl.New()
 
-  dec, err := o.DecryptString(passphrase, opensslEncrypted)
+  dec, err := o.DecryptBytes(passphrase, []byte(opensslEncrypted), DigestMD5Sum)
   if err != nil {
     fmt.Printf("An error occurred: %s\n", err)
   }

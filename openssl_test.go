@@ -16,7 +16,7 @@ func TestDecryptFromStringMD5(t *testing.T) {
 
 	o := New()
 
-	data, err := o.DecryptString(passphrase, opensslEncrypted)
+	data, err := o.DecryptBytes(passphrase, []byte(opensslEncrypted), DigestMD5Sum)
 
 	if err != nil {
 		t.Fatalf("Test errored: %s", err)
@@ -36,7 +36,7 @@ func TestDecryptFromStringSHA1(t *testing.T) {
 
 	o := New()
 
-	data, err := o.DecryptString(passphrase, opensslEncrypted)
+	data, err := o.DecryptBytes(passphrase, []byte(opensslEncrypted), DigestSHA1Sum)
 
 	if err != nil {
 		t.Fatalf("Test errored: %s", err)
@@ -56,7 +56,7 @@ func TestDecryptFromStringSHA256(t *testing.T) {
 
 	o := New()
 
-	data, err := o.DecryptString(passphrase, opensslEncrypted)
+	data, err := o.DecryptBytes(passphrase, []byte(opensslEncrypted), DigestSHA256Sum)
 
 	if err != nil {
 		t.Fatalf("Test errored: %s", err)
@@ -73,12 +73,12 @@ func TestEncryptToDecrypt(t *testing.T) {
 
 	o := New()
 
-	enc, err := o.EncryptString(passphrase, plaintext)
+	enc, err := o.EncryptBytes(passphrase, []byte(plaintext), DigestSHA256Sum)
 	if err != nil {
 		t.Fatalf("Test errored at encrypt: %s", err)
 	}
 
-	dec, err := o.DecryptString(passphrase, string(enc))
+	dec, err := o.DecryptBytes(passphrase, enc, DigestSHA256Sum)
 	if err != nil {
 		t.Fatalf("Test errored at decrypt: %s", err)
 	}
@@ -95,12 +95,12 @@ func TestEncryptToDecryptWithCustomSalt(t *testing.T) {
 
 	o := New()
 
-	enc, err := o.EncryptStringWithSalt(passphrase, salt, plaintext)
+	enc, err := o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), DigestSHA256Sum)
 	if err != nil {
 		t.Fatalf("Test errored at encrypt: %s", err)
 	}
 
-	dec, err := o.DecryptString(passphrase, string(enc))
+	dec, err := o.DecryptBytes(passphrase, enc, DigestSHA256Sum)
 	if err != nil {
 		t.Fatalf("Test errored at decrypt: %s", err)
 	}
@@ -117,12 +117,12 @@ func TestEncryptWithSaltShouldHaveSameOutput(t *testing.T) {
 
 	o := New()
 
-	enc1, err := o.EncryptStringWithSalt(passphrase, salt, plaintext)
+	enc1, err := o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), DigestSHA256Sum)
 	if err != nil {
 		t.Fatalf("Test errored at encrypt: %s", err)
 	}
 
-	enc2, err := o.EncryptStringWithSalt(passphrase, salt, plaintext)
+	enc2, err := o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), DigestSHA256Sum)
 	if err != nil {
 		t.Fatalf("Test errored at encrypt: %s", err)
 	}
@@ -160,7 +160,6 @@ func TestEncryptToOpenSSL(t *testing.T) {
 
 		var out bytes.Buffer
 		cmd.Stdout = &out
-		cmd.Stderr = &out
 
 		err = cmd.Run()
 		if err != nil {
@@ -199,38 +198,38 @@ func TestSaltValidation(t *testing.T) {
 
 	o := New()
 
-	if _, err := o.EncryptStringWithSalt(passphrase, []byte("12345"), plaintext); err != ErrInvalidSalt {
+	if _, err := o.EncryptBytesWithSaltAndDigestFunc(passphrase, []byte("12345"), []byte(plaintext), DigestSHA256Sum); err != ErrInvalidSalt {
 		t.Errorf("5-character salt was accepted, needs to have 8 character")
 	}
 
-	if _, err := o.EncryptStringWithSalt(passphrase, []byte("1234567890"), plaintext); err != ErrInvalidSalt {
+	if _, err := o.EncryptBytesWithSaltAndDigestFunc(passphrase, []byte("1234567890"), []byte(plaintext), DigestSHA256Sum); err != ErrInvalidSalt {
 		t.Errorf("10-character salt was accepted, needs to have 8 character")
 	}
 
-	if _, err := o.EncryptStringWithSalt(passphrase, []byte{0xcb, 0xd5, 0x1a, 0x3, 0x84, 0xba, 0xa8, 0xc8}, plaintext); err == ErrInvalidSalt {
+	if _, err := o.EncryptBytesWithSaltAndDigestFunc(passphrase, []byte{0xcb, 0xd5, 0x1a, 0x3, 0x84, 0xba, 0xa8, 0xc8}, []byte(plaintext), DigestSHA256Sum); err == ErrInvalidSalt {
 		t.Errorf("Salt with 8 byte unprintable characters was not accepted")
 	}
 }
 
-func benchmarkDecrypt(ciphertext string, b *testing.B) {
+func benchmarkDecrypt(ciphertext []byte, kdf DigestFunc, b *testing.B) {
 	passphrase := "z4yH36a6zerhfE5427ZV"
 	o := New()
 
 	for n := 0; n < b.N; n++ {
-		o.DecryptString(passphrase, ciphertext)
+		o.DecryptBytes(passphrase, ciphertext, kdf)
 	}
 }
 
 func BenchmarkDecryptMD5(b *testing.B) {
-	benchmarkDecrypt("U2FsdGVkX19ZM5qQJGe/d5A/4pccgH+arBGTp+QnWPU=", b)
+	benchmarkDecrypt([]byte("U2FsdGVkX19ZM5qQJGe/d5A/4pccgH+arBGTp+QnWPU="), DigestMD5Sum, b)
 }
 
 func BenchmarkDecryptSHA1(b *testing.B) {
-	benchmarkDecrypt("U2FsdGVkX1/Yy9kegseq2Ewd4UvjFYCpIEA1cltTA1Q=", b)
+	benchmarkDecrypt([]byte("U2FsdGVkX1/Yy9kegseq2Ewd4UvjFYCpIEA1cltTA1Q="), DigestSHA1Sum, b)
 }
 
 func BenchmarkDecryptSHA256(b *testing.B) {
-	benchmarkDecrypt("U2FsdGVkX1+O68d7BO9ibP8nB5+xtb/27IHlyjJWpl8=", b)
+	benchmarkDecrypt([]byte("U2FsdGVkX1+O68d7BO9ibP8nB5+xtb/27IHlyjJWpl8="), DigestSHA256Sum, b)
 }
 
 func benchmarkEncrypt(plaintext string, hashFunc DigestFunc, b *testing.B) {

@@ -8,14 +8,30 @@
 
 `go-openssl` is a small library wrapping the `crypto/aes` functions in a way the output is compatible to OpenSSL / CryptoJS. For all encryption / decryption processes AES256 is used so this library will not be able to decrypt messages generated with other than `openssl aes-256-cbc`. If you're using CryptoJS to process the data you also need to use AES256 on that side.
 
-## OpenSSL 1.1.0c compatibility
+## Version support
+
+For this library only the latest major version is supported. All prior major versions should no longer be used.
+
+The versioning is following [SemVer](https://semver.org/) which means upgrading to a newer major version will break your code!
+
+## OpenSSL compatibility
+
+### 1.1.0c
 
 Starting with `v2.0.0` `go-openssl` generates the encryption keys using `sha256sum` algorithm. This is the default introduced in OpenSSL 1.1.0c. When encrypting data you can choose which digest method to use and therefore also continue to use `md5sum`. When decrypting OpenSSL encrypted data `md5sum`, `sha1sum` and `sha256sum` are supported.
 
+### 1.1.1
+
+The PBKDF2 key derivation is not yet supported.
+
 ## Installation
 
-```
+```bash
+# Get the latest version
 go get github.com/Luzifer/go-openssl
+
+# OR get a specific version
+go get gopkg.in/Luzifer/go-openssl.v3
 ```
 
 ## Usage example

@@ -1,3 +1,7 @@
+# 3.0.1 / 2019-01-29
+
+  * Fix: v3 versions require another go-modules name
+
 # 3.0.0 / 2018-11-02
 
   * Breaking: Fix race condition with guessing messagedigest

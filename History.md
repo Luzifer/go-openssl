@@ -1,3 +1,9 @@
+# 3.1.0 / 2019-04-29
+
+  * Add encrypt/decrypt without base64 encoding (thanks [@mcgillowen](https://github.com/mcgillowen))
+  * Test: Drop support for pre-1.10, add 1.12
+  * Test: Simplify / cleanup test file
+
 # 3.0.1 / 2019-01-29
 
   * Fix: v3 versions require another go-modules name

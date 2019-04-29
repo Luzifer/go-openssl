@@ -4,111 +4,80 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"strings"
 	"testing"
 )
 
-func TestDecryptFromStringMD5(t *testing.T) {
-	// > echo -n "hallowelt" | openssl aes-256-cbc -pass pass:z4yH36a6zerhfE5427ZV -md md5 -a -salt
-	// U2FsdGVkX19ZM5qQJGe/d5A/4pccgH+arBGTp+QnWPU=
-
-	opensslEncrypted := "U2FsdGVkX19ZM5qQJGe/d5A/4pccgH+arBGTp+QnWPU="
-	passphrase := "z4yH36a6zerhfE5427ZV"
-
-	o := New()
-
-	data, err := o.DecryptBytes(passphrase, []byte(opensslEncrypted), DigestMD5Sum)
-
-	if err != nil {
-		t.Fatalf("Test errored: %s", err)
-	}
-
-	if string(data) != "hallowelt" {
-		t.Errorf("Decryption output did not equal expected output.")
-	}
+var testTable = []struct {
+	tName    string
+	tMdParam string
+	tMdFunc  DigestFunc
+}{
+	{"MD5", "md5", DigestMD5Sum},
+	{"SHA1", "sha1", DigestSHA1Sum},
+	{"SHA256", "sha256", DigestSHA256Sum},
 }
 
-func TestDecryptFromStringSHA1(t *testing.T) {
-	// > echo -n "hallowelt" | openssl aes-256-cbc -pass pass:z4yH36a6zerhfE5427ZV -md sha1 -a -salt
-	// U2FsdGVkX1/Yy9kegseq2Ewd4UvjFYCpIEA1cltTA1Q=
-
-	opensslEncrypted := "U2FsdGVkX1/Yy9kegseq2Ewd4UvjFYCpIEA1cltTA1Q="
+func TestDecryptFromString(t *testing.T) {
+	plaintext := "hallowelt"
 	passphrase := "z4yH36a6zerhfE5427ZV"
 
 	o := New()
 
-	data, err := o.DecryptBytes(passphrase, []byte(opensslEncrypted), DigestSHA1Sum)
+	for _, tc := range testTable {
+		t.Run(tc.tName, func(t *testing.T) {
+			var out bytes.Buffer
 
-	if err != nil {
-		t.Fatalf("Test errored: %s", err)
-	}
+			cmd := exec.Command(
+				"openssl", "aes-256-cbc",
+				"-base64",
+				"-pass", fmt.Sprintf("pass:%s", passphrase),
+				"-md", tc.tMdParam,
+			)
+			cmd.Stdout = &out
+			cmd.Stdin = strings.NewReader(plaintext)
 
-	if string(data) != "hallowelt" {
-		t.Errorf("Decryption output did not equal expected output.")
-	}
-}
+			if err := cmd.Run(); err != nil {
+				t.Fatalf("Running openssl CLI failed: %v", err)
+			}
 
-func TestDecryptFromStringSHA256(t *testing.T) {
-	// > echo -n "hallowelt" | openssl aes-256-cbc -pass pass:z4yH36a6zerhfE5427ZV -md sha256 -a -salt
-	// U2FsdGVkX1+O68d7BO9ibP8nB5+xtb/27IHlyjJWpl8=
+			data, err := o.DecryptBytes(passphrase, out.Bytes(), tc.tMdFunc)
+			if err != nil {
+				t.Fatalf("Decryption failed: %v", err)
+			}
 
-	opensslEncrypted := "U2FsdGVkX1+O68d7BO9ibP8nB5+xtb/27IHlyjJWpl8="
-	passphrase := "z4yH36a6zerhfE5427ZV"
-
-	o := New()
-
-	data, err := o.DecryptBytes(passphrase, []byte(opensslEncrypted), DigestSHA256Sum)
-
-	if err != nil {
-		t.Fatalf("Test errored: %s", err)
-	}
-
-	if string(data) != "hallowelt" {
-		t.Errorf("Decryption output did not equal expected output.")
+			if string(data) != plaintext {
+				t.Logf("Data: %s\nPlaintext: %s", string(data), plaintext)
+				t.Errorf("Decryption output did not equal expected output.")
+			}
+		})
 	}
 }
 
 func TestDecryptBinaryFromString(t *testing.T) {
-
 	plaintext := "hallowelt"
 	passphrase := "z4yH36a6zerhfE5427ZV"
 
-	testtable :=
-		[]struct {
-			tname    string
-			tMdParam string
-			tMdFunc  DigestFunc
-		}{
-			{
-				tname:    "MD5",
-				tMdParam: "md5",
-				tMdFunc:  DigestMD5Sum,
-			},
-			{
-				tname:    "SHA1",
-				tMdParam: "sha1",
-				tMdFunc:  DigestSHA1Sum,
-			},
-			{
-				tname:    "SHA256",
-				tMdParam: "sha256",
-				tMdFunc:  DigestSHA256Sum,
-			},
-		}
-
 	o := New()
 
-	for _, tc := range testtable {
-		t.Run(tc.tname, func(t *testing.T) {
-			cmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("echo -n \"%s\" | openssl aes-256-cbc -pass pass:%s -md %s", plaintext, passphrase, tc.tMdParam))
+	for _, tc := range testTable {
+		t.Run(tc.tName, func(t *testing.T) {
 			var out bytes.Buffer
+
+			cmd := exec.Command(
+				"openssl", "aes-256-cbc",
+				"-pass", fmt.Sprintf("pass:%s", passphrase),
+				"-md", tc.tMdParam,
+				"-in", "/dev/stdin",
+			)
 			cmd.Stdout = &out
-			err := cmd.Run()
-			if err != nil {
+			cmd.Stdin = strings.NewReader(plaintext)
+
+			if err := cmd.Run(); err != nil {
 				t.Fatalf("Running openssl CLI failed: %v", err)
 			}
 
 			data, err := o.DecryptBinaryBytes(passphrase, out.Bytes(), tc.tMdFunc)
-
 			if err != nil {
 				t.Fatalf("Decryption failed: %v", err)
 			}
@@ -255,39 +224,43 @@ func TestEncryptToOpenSSL(t *testing.T) {
 	plaintext := "hallowelt"
 	passphrase := "z4yH36a6zerhfE5427ZV"
 
-	matrix := map[string]DigestFunc{
-		"md5":    DigestMD5Sum,
-		"sha1":   DigestSHA1Sum,
-		"sha256": DigestSHA256Sum,
-	}
+	for _, tc := range testTable {
+		t.Run(tc.tName, func(t *testing.T) {
+			o := New()
 
-	for mdParam, hashFunc := range matrix {
-		o := New()
+			salt, err := o.GenerateSalt()
+			if err != nil {
+				t.Fatalf("Failed to generate salt: %s", err)
+			}
 
-		salt, err := o.GenerateSalt()
-		if err != nil {
-			t.Fatalf("Failed to generate salt: %s", err)
-		}
+			enc, err := o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), tc.tMdFunc)
+			if err != nil {
+				t.Fatalf("Test errored at encrypt (%s): %s", tc.tMdParam, err)
+			}
 
-		enc, err := o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), hashFunc)
-		if err != nil {
-			t.Fatalf("Test errored at encrypt (%s): %s", mdParam, err)
-		}
+			enc = append(enc, '\n')
 
-		// WTF? Without "echo" openssl tells us "error reading input file"
-		cmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("echo \"%s\" | openssl aes-256-cbc -k %s -md %s -d -a", string(enc), passphrase, mdParam))
+			var out bytes.Buffer
 
-		var out bytes.Buffer
-		cmd.Stdout = &out
+			cmd := exec.Command(
+				"openssl", "aes-256-cbc",
+				"-base64", "-d",
+				"-pass", fmt.Sprintf("pass:%s", passphrase),
+				"-md", tc.tMdParam,
+				"-in", "/dev/stdin",
+			)
+			cmd.Stdout = &out
+			cmd.Stdin = bytes.NewReader(enc)
 
-		err = cmd.Run()
-		if err != nil {
-			t.Errorf("OpenSSL errored (%s): %s", mdParam, err)
-		}
+			err = cmd.Run()
+			if err != nil {
+				t.Errorf("OpenSSL errored (%s): %s", tc.tMdParam, err)
+			}
 
-		if out.String() != plaintext {
-			t.Errorf("OpenSSL output did not match input.\nOutput was (%s): %s", mdParam, out.String())
-		}
+			if out.String() != plaintext {
+				t.Errorf("OpenSSL output did not match input.\nOutput was (%s): %s", tc.tMdParam, out.String())
+			}
+		})
 	}
 }
 
@@ -295,33 +268,10 @@ func TestBinaryEncryptToOpenSSL(t *testing.T) {
 	plaintext := "hallowelt"
 	passphrase := "z4yH36a6zerhfE5427ZV"
 
-	testtable :=
-		[]struct {
-			tname    string
-			tMdParam string
-			tMdFunc  DigestFunc
-		}{
-			{
-				tname:    "MD5",
-				tMdParam: "md5",
-				tMdFunc:  DigestMD5Sum,
-			},
-			{
-				tname:    "SHA1",
-				tMdParam: "sha1",
-				tMdFunc:  DigestSHA1Sum,
-			},
-			{
-				tname:    "SHA256",
-				tMdParam: "sha256",
-				tMdFunc:  DigestSHA256Sum,
-			},
-		}
-
 	o := New()
 
-	for _, tc := range testtable {
-		t.Run(tc.tname, func(t *testing.T) {
+	for _, tc := range testTable {
+		t.Run(tc.tName, func(t *testing.T) {
 			salt, err := o.GenerateSalt()
 			if err != nil {
 				t.Fatalf("Failed to generate salt: %v", err)
@@ -334,7 +284,13 @@ func TestBinaryEncryptToOpenSSL(t *testing.T) {
 
 			// Need to specify /dev/stdin as file so that we can pass in binary
 			// data to openssl without creating a file
-			cmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("openssl aes-256-cbc -pass pass:%s -md %s -d -in /dev/stdin", passphrase, tc.tMdParam))
+			cmd := exec.Command(
+				"openssl", "aes-256-cbc",
+				"-d",
+				"-pass", fmt.Sprintf("pass:%s", passphrase),
+				"-md", tc.tMdParam,
+				"-in", "/dev/stdin",
+			)
 
 			var out bytes.Buffer
 			cmd.Stdout = &out
@@ -357,7 +313,7 @@ func TestGenerateSalt(t *testing.T) {
 
 	o := New()
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 1000; i++ {
 		salt, err := o.GenerateSalt()
 		if err != nil {
 			t.Fatalf("Failed to generate salt: %s", err)

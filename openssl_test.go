@@ -67,6 +67,60 @@ func TestDecryptFromStringSHA256(t *testing.T) {
 	}
 }
 
+func TestDecryptBinaryFromString(t *testing.T) {
+
+	plaintext := "hallowelt"
+	passphrase := "z4yH36a6zerhfE5427ZV"
+
+	testtable :=
+		[]struct {
+			tname    string
+			tMdParam string
+			tMdFunc  DigestFunc
+		}{
+			{
+				tname:    "MD5",
+				tMdParam: "md5",
+				tMdFunc:  DigestMD5Sum,
+			},
+			{
+				tname:    "SHA1",
+				tMdParam: "sha1",
+				tMdFunc:  DigestSHA1Sum,
+			},
+			{
+				tname:    "SHA256",
+				tMdParam: "sha256",
+				tMdFunc:  DigestSHA256Sum,
+			},
+		}
+
+	o := New()
+
+	for _, tc := range testtable {
+		t.Run(tc.tname, func(t *testing.T) {
+			cmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("echo -n \"%s\" | openssl aes-256-cbc -pass pass:%s -md %s", plaintext, passphrase, tc.tMdParam))
+			var out bytes.Buffer
+			cmd.Stdout = &out
+			err := cmd.Run()
+			if err != nil {
+				t.Fatalf("Running openssl CLI failed: %v", err)
+			}
+
+			data, err := o.DecryptBinaryBytes(passphrase, out.Bytes(), tc.tMdFunc)
+
+			if err != nil {
+				t.Fatalf("Decryption failed: %v", err)
+			}
+
+			if string(data) != plaintext {
+				t.Logf("Data: %s\nPlaintext: %s", string(data), plaintext)
+				t.Errorf("Decryption output did not equal expected output.")
+			}
+		})
+	}
+}
+
 func TestEncryptToDecrypt(t *testing.T) {
 	plaintext := "hallowelt"
 	passphrase := "z4yH36a6zerhfE5427ZV"
@@ -79,6 +133,27 @@ func TestEncryptToDecrypt(t *testing.T) {
 	}
 
 	dec, err := o.DecryptBytes(passphrase, enc, DigestSHA256Sum)
+	if err != nil {
+		t.Fatalf("Test errored at decrypt: %s", err)
+	}
+
+	if string(dec) != plaintext {
+		t.Errorf("Decrypted text did not match input.")
+	}
+}
+
+func TestBinaryEncryptToDecrypt(t *testing.T) {
+	plaintext := "hallowelt"
+	passphrase := "z4yH36a6zerhfE5427ZV"
+
+	o := New()
+
+	enc, err := o.EncryptBinaryBytes(passphrase, []byte(plaintext), DigestSHA256Sum)
+	if err != nil {
+		t.Fatalf("Test errored at encrypt: %s", err)
+	}
+
+	dec, err := o.DecryptBinaryBytes(passphrase, enc, DigestSHA256Sum)
 	if err != nil {
 		t.Fatalf("Test errored at decrypt: %s", err)
 	}
@@ -110,6 +185,28 @@ func TestEncryptToDecryptWithCustomSalt(t *testing.T) {
 	}
 }
 
+func TestBinaryEncryptToDecryptWithCustomSalt(t *testing.T) {
+	plaintext := "hallowelt"
+	passphrase := "z4yH36a6zerhfE5427ZV"
+	salt := []byte("saltsalt")
+
+	o := New()
+
+	enc, err := o.EncryptBinaryBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), DigestSHA256Sum)
+	if err != nil {
+		t.Fatalf("Test errored at encrypt: %s", err)
+	}
+
+	dec, err := o.DecryptBinaryBytes(passphrase, enc, DigestSHA256Sum)
+	if err != nil {
+		t.Fatalf("Test errored at decrypt: %s", err)
+	}
+
+	if string(dec) != plaintext {
+		t.Errorf("Decrypted text did not match input.")
+	}
+}
+
 func TestEncryptWithSaltShouldHaveSameOutput(t *testing.T) {
 	plaintext := "outputshouldbesame"
 	passphrase := "passphrasesupersecure"
@@ -123,6 +220,28 @@ func TestEncryptWithSaltShouldHaveSameOutput(t *testing.T) {
 	}
 
 	enc2, err := o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), DigestSHA256Sum)
+	if err != nil {
+		t.Fatalf("Test errored at encrypt: %s", err)
+	}
+
+	if string(enc1) != string(enc2) {
+		t.Errorf("Encrypted outputs are not same.")
+	}
+}
+
+func TestBinaryEncryptWithSaltShouldHaveSameOutput(t *testing.T) {
+	plaintext := "outputshouldbesame"
+	passphrase := "passphrasesupersecure"
+	salt := []byte("saltsalt")
+
+	o := New()
+
+	enc1, err := o.EncryptBinaryBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), DigestSHA256Sum)
+	if err != nil {
+		t.Fatalf("Test errored at encrypt: %s", err)
+	}
+
+	enc2, err := o.EncryptBinaryBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), DigestSHA256Sum)
 	if err != nil {
 		t.Fatalf("Test errored at encrypt: %s", err)
 	}
@@ -169,6 +288,67 @@ func TestEncryptToOpenSSL(t *testing.T) {
 		if out.String() != plaintext {
 			t.Errorf("OpenSSL output did not match input.\nOutput was (%s): %s", mdParam, out.String())
 		}
+	}
+}
+
+func TestBinaryEncryptToOpenSSL(t *testing.T) {
+	plaintext := "hallowelt"
+	passphrase := "z4yH36a6zerhfE5427ZV"
+
+	testtable :=
+		[]struct {
+			tname    string
+			tMdParam string
+			tMdFunc  DigestFunc
+		}{
+			{
+				tname:    "MD5",
+				tMdParam: "md5",
+				tMdFunc:  DigestMD5Sum,
+			},
+			{
+				tname:    "SHA1",
+				tMdParam: "sha1",
+				tMdFunc:  DigestSHA1Sum,
+			},
+			{
+				tname:    "SHA256",
+				tMdParam: "sha256",
+				tMdFunc:  DigestSHA256Sum,
+			},
+		}
+
+	o := New()
+
+	for _, tc := range testtable {
+		t.Run(tc.tname, func(t *testing.T) {
+			salt, err := o.GenerateSalt()
+			if err != nil {
+				t.Fatalf("Failed to generate salt: %v", err)
+			}
+
+			enc, err := o.EncryptBinaryBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), tc.tMdFunc)
+			if err != nil {
+				t.Fatalf("Test errored at encrypt: %v", err)
+			}
+
+			// Need to specify /dev/stdin as file so that we can pass in binary
+			// data to openssl without creating a file
+			cmd := exec.Command("/bin/bash", "-c", fmt.Sprintf("openssl aes-256-cbc -pass pass:%s -md %s -d -in /dev/stdin", passphrase, tc.tMdParam))
+
+			var out bytes.Buffer
+			cmd.Stdout = &out
+			cmd.Stdin = bytes.NewBuffer(enc)
+
+			err = cmd.Run()
+			if err != nil {
+				t.Errorf("OpenSSL errored: %v", err)
+			}
+
+			if out.String() != plaintext {
+				t.Errorf("OpenSSL output did not match input.\nOutput was: %s", out.String())
+			}
+		})
 	}
 }
 

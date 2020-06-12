@@ -8,7 +8,7 @@ func ExampleOpenSSL_EncryptBytes() {
 
 	o := New()
 
-	enc, err := o.EncryptBytes(passphrase, []byte(plaintext), BytesToKeyMD5)
+	enc, err := o.EncryptBytes(passphrase, []byte(plaintext), PBKDF2SHA256)
 	if err != nil {
 		fmt.Printf("An error occurred: %s\n", err)
 	}

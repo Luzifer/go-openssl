@@ -22,7 +22,7 @@ Starting with `v2.0.0` `go-openssl` generates the encryption keys using `sha256s
 
 ### 1.1.1
 
-The PBKDF2 key derivation is not yet supported.
+Starting with `v4.0.0` `go-openssl` is capable of using the PBKDF2 key derivation method for encryption. You can choose to use it by passing the corresponding `CredsGenerator`.
 
 ## Installation
 
@@ -31,7 +31,7 @@ The PBKDF2 key derivation is not yet supported.
 go get github.com/Luzifer/go-openssl
 
 # OR get a specific version
-go get gopkg.in/Luzifer/go-openssl.v3
+go get gopkg.in/Luzifer/go-openssl.v4
 ```
 
 ## Usage example
@@ -43,7 +43,7 @@ The usage is quite simple as you don't need any special knowledge about OpenSSL 
 ```go
 import (
   "fmt"
-  openssl "gopkg.in/Luzifer/go-openssl.v3"
+  openssl "gopkg.in/Luzifer/go-openssl.v4"
 )
 
 func main() {
@@ -52,7 +52,7 @@ func main() {
 
   o := openssl.New()
 
-  enc, err := o.EncryptBytes(passphrase, []byte(plaintext), DigestSHA256Sum)
+  enc, err := o.EncryptBytes(passphrase, []byte(plaintext), PBKDF2SHA256)
   if err != nil {
     fmt.Printf("An error occurred: %s\n", err)
   }
@@ -66,7 +66,7 @@ func main() {
 ```go
 import (
   "fmt"
-  openssl "gopkg.in/Luzifer/go-openssl.v3"
+  openssl "gopkg.in/Luzifer/go-openssl.v4"
 )
 
 func main() {
@@ -75,7 +75,7 @@ func main() {
 
   o := openssl.New()
 
-  dec, err := o.DecryptBytes(passphrase, []byte(opensslEncrypted), DigestMD5Sum)
+  dec, err := o.DecryptBytes(passphrase, []byte(opensslEncrypted), BytesToKeyMD5)
   if err != nil {
     fmt.Printf("An error occurred: %s\n", err)
   }

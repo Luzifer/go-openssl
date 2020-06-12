@@ -1,4 +1,4 @@
-module github.com/Luzifer/go-openssl/v3
+module github.com/Luzifer/go-openssl/v4
 
 go 1.14
 

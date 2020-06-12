@@ -6,9 +6,6 @@ import (
 	"crypto/sha256"
 )
 
-// CurrentOpenSSLDigestFunc is an alias to the key derivation function used in OpenSSL
-var CurrentOpenSSLDigestFunc = DigestSHA256Sum
-
 // DigestFunc are functions to create a key from the passphrase
 type DigestFunc func([]byte) []byte
 

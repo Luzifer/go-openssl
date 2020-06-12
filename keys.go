@@ -12,7 +12,7 @@ import (
 const DefaultPBKDF2Iterations = 10000
 
 // CredsGenerator are functions to derive a key and iv from a password and a salt
-type CredsGenerator func(password, salt []byte) (OpenSSLCreds, error)
+type CredsGenerator func(password, salt []byte) (Creds, error)
 
 var (
 	BytesToKeyMD5    = NewBytesToKeyGenerator(md5.New)
@@ -34,7 +34,7 @@ func NewBytesToKeyGenerator(hashFunc func() hash.Hash) CredsGenerator {
 		return h.Sum(nil)
 	}
 
-	return func(password, salt []byte) (OpenSSLCreds, error) {
+	return func(password, salt []byte) (Creds, error) {
 		var m []byte
 		prev := []byte{}
 		for len(m) < 48 {
@@ -46,13 +46,13 @@ func NewBytesToKeyGenerator(hashFunc func() hash.Hash) CredsGenerator {
 			prev = df(a)
 			m = append(m, prev...)
 		}
-		return OpenSSLCreds{Key: m[:32], IV: m[32:48]}, nil
+		return Creds{Key: m[:32], IV: m[32:48]}, nil
 	}
 }
 
 func NewPBKDF2Generator(hashFunc func() hash.Hash, iterations int) CredsGenerator {
-	return func(password, salt []byte) (OpenSSLCreds, error) {
+	return func(password, salt []byte) (Creds, error) {
 		m := pbkdf2.Key(password, salt, iterations, 32+16, hashFunc)
-		return OpenSSLCreds{Key: m[:32], IV: m[32:48]}, nil
+		return Creds{Key: m[:32], IV: m[32:48]}, nil
 	}
 }

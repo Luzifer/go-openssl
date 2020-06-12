@@ -22,13 +22,13 @@ type OpenSSL struct {
 	openSSLSaltHeader string
 }
 
-// OpenSSLCreds holds a key and an IV for encryption methods
-type OpenSSLCreds struct {
+// Creds holds a key and an IV for encryption methods
+type Creds struct {
 	Key []byte
 	IV  []byte
 }
 
-func (o OpenSSLCreds) equals(i OpenSSLCreds) bool {
+func (o Creds) equals(i Creds) bool {
 	// If lengths does not match no chance they are equal
 	if len(o.Key) != len(i.Key) || len(o.IV) != len(i.IV) {
 		return false
@@ -245,7 +245,7 @@ func (o OpenSSL) pkcs7Pad(data []byte, blocklen int) ([]byte, error) {
 	}
 	padlen := 1
 	for ((len(data) + padlen) % blocklen) != 0 {
-		padlen = padlen + 1
+		padlen++
 	}
 
 	pad := bytes.Repeat([]byte{byte(padlen)}, padlen)

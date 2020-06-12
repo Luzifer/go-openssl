@@ -9,7 +9,7 @@ import (
 	"golang.org/x/crypto/pbkdf2"
 )
 
-const defaultPBKDF2Iterations = 10000
+const DefaultPBKDF2Iterations = 10000
 
 // CredsGenerator are functions to derive a key and iv from a password and a salt
 type CredsGenerator func(password, salt []byte) (OpenSSLCreds, error)
@@ -18,9 +18,9 @@ var (
 	BytesToKeyMD5    = NewBytesToKeyGenerator(md5.New)
 	BytesToKeySHA1   = NewBytesToKeyGenerator(sha1.New)
 	BytesToKeySHA256 = NewBytesToKeyGenerator(sha256.New)
-	PBKDF2MD5        = NewPBKDF2Generator(md5.New, defaultPBKDF2Iterations)
-	PBKDF2SHA1       = NewPBKDF2Generator(sha1.New, defaultPBKDF2Iterations)
-	PBKDF2SHA256     = NewPBKDF2Generator(sha256.New, defaultPBKDF2Iterations)
+	PBKDF2MD5        = NewPBKDF2Generator(md5.New, DefaultPBKDF2Iterations)
+	PBKDF2SHA1       = NewPBKDF2Generator(sha1.New, DefaultPBKDF2Iterations)
+	PBKDF2SHA256     = NewPBKDF2Generator(sha256.New, DefaultPBKDF2Iterations)
 )
 
 // openSSLEvpBytesToKey follows the OpenSSL (undocumented?) convention for extracting the key and IV from passphrase.

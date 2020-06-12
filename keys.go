@@ -4,46 +4,36 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
+	"hash"
+
+	"golang.org/x/crypto/pbkdf2"
 )
 
-// DigestFunc are functions to create a key from the passphrase
-type DigestFunc func([]byte) []byte
-
-// DigestMD5Sum uses the (deprecated) pre-OpenSSL 1.1.0c MD5 digest to create the key
-func DigestMD5Sum(data []byte) []byte {
-	h := md5.New()
-	h.Write(data)
-	return h.Sum(nil)
-}
-
-// DigestSHA1Sum uses SHA1 digest to create the key
-func DigestSHA1Sum(data []byte) []byte {
-	h := sha1.New()
-	h.Write(data)
-	return h.Sum(nil)
-}
-
-// DigestSHA256Sum uses SHA256 digest to create the key which is the default behaviour since OpenSSL 1.1.0c
-func DigestSHA256Sum(data []byte) []byte {
-	h := sha256.New()
-	h.Write(data)
-	return h.Sum(nil)
-}
+const defaultPBKDF2Iterations = 10000
 
 // CredsGenerator are functions to derive a key and iv from a password and a salt
 type CredsGenerator func(password, salt []byte) (OpenSSLCreds, error)
 
 var (
-	BytesToKeyMD5    = NewBytesToKeyGenerator(DigestMD5Sum)
-	BytesToKeySHA1   = NewBytesToKeyGenerator(DigestSHA1Sum)
-	BytesToKeySHA256 = NewBytesToKeyGenerator(DigestSHA256Sum)
+	BytesToKeyMD5    = NewBytesToKeyGenerator(md5.New)
+	BytesToKeySHA1   = NewBytesToKeyGenerator(sha1.New)
+	BytesToKeySHA256 = NewBytesToKeyGenerator(sha256.New)
+	PBKDF2MD5        = NewPBKDF2Generator(md5.New, defaultPBKDF2Iterations)
+	PBKDF2SHA1       = NewPBKDF2Generator(sha1.New, defaultPBKDF2Iterations)
+	PBKDF2SHA256     = NewPBKDF2Generator(sha256.New, defaultPBKDF2Iterations)
 )
 
 // openSSLEvpBytesToKey follows the OpenSSL (undocumented?) convention for extracting the key and IV from passphrase.
 // It uses the EVP_BytesToKey() method which is basically:
 // D_i = HASH^count(D_(i-1) || password || salt) where || denotes concatentaion, until there are sufficient bytes available
 // 48 bytes since we're expecting to handle AES-256, 32bytes for a key and 16bytes for the IV
-func NewBytesToKeyGenerator(hashFunc DigestFunc) CredsGenerator {
+func NewBytesToKeyGenerator(hashFunc func() hash.Hash) CredsGenerator {
+	df := func(in []byte) []byte {
+		h := hashFunc()
+		h.Write(in)
+		return h.Sum(nil)
+	}
+
 	return func(password, salt []byte) (OpenSSLCreds, error) {
 		var m []byte
 		prev := []byte{}
@@ -53,16 +43,16 @@ func NewBytesToKeyGenerator(hashFunc DigestFunc) CredsGenerator {
 			copy(a[len(prev):], password)
 			copy(a[len(prev)+len(password):], salt)
 
-			prev = hashFunc(a)
+			prev = df(a)
 			m = append(m, prev...)
 		}
 		return OpenSSLCreds{Key: m[:32], IV: m[32:48]}, nil
 	}
 }
 
-func NewPBKDF2Generator(hashFunc DigestFunc) CredsGenerator {
+func NewPBKDF2Generator(hashFunc func() hash.Hash, iterations int) CredsGenerator {
 	return func(password, salt []byte) (OpenSSLCreds, error) {
-		// FIXME: Implement something useful
-		return OpenSSLCreds{}, nil
+		m := pbkdf2.Key(password, salt, iterations, 32+16, hashFunc)
+		return OpenSSLCreds{Key: m[:32], IV: m[32:48]}, nil
 	}
 }

@@ -33,7 +33,14 @@ func DigestSHA256Sum(data []byte) []byte {
 	return h.Sum(nil)
 }
 
+// CredsGenerator are functions to derive a key and iv from a password and a salt
 type CredsGenerator func(password, salt []byte) (OpenSSLCreds, error)
+
+var (
+	BytesToKeyMD5    = NewBytesToKeyGenerator(DigestMD5Sum)
+	BytesToKeySHA1   = NewBytesToKeyGenerator(DigestSHA1Sum)
+	BytesToKeySHA256 = NewBytesToKeyGenerator(DigestSHA256Sum)
+)
 
 // openSSLEvpBytesToKey follows the OpenSSL (undocumented?) convention for extracting the key and IV from passphrase.
 // It uses the EVP_BytesToKey() method which is basically:

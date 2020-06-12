@@ -12,10 +12,14 @@ var testTable = []struct {
 	tName    string
 	tMdParam string
 	tMdFunc  CredsGenerator
+	tPBKDF   bool
 }{
-	{"MD5", "md5", BytesToKeyMD5},
-	{"SHA1", "sha1", BytesToKeySHA1},
-	{"SHA256", "sha256", BytesToKeySHA256},
+	{"MD5", "md5", BytesToKeyMD5, false},
+	{"SHA1", "sha1", BytesToKeySHA1, false},
+	{"SHA256", "sha256", BytesToKeySHA256, false},
+	{"PBKDF2_MD5", "md5", PBKDF2MD5, true},
+	{"PBKDF2_SHA1", "sha1", PBKDF2SHA1, true},
+	{"PBKDF2_SHA256", "sha256", PBKDF2SHA256, true},
 }
 
 func TestBinaryEncryptToDecryptWithCustomSalt(t *testing.T) {
@@ -81,13 +85,19 @@ func TestBinaryEncryptToOpenSSL(t *testing.T) {
 
 			// Need to specify /dev/stdin as file so that we can pass in binary
 			// data to openssl without creating a file
-			cmd := exec.Command(
+			cmdArgs := []string{
 				"openssl", "aes-256-cbc",
 				"-d",
 				"-pass", fmt.Sprintf("pass:%s", passphrase),
 				"-md", tc.tMdParam,
 				"-in", "/dev/stdin",
-			)
+			}
+
+			if tc.tPBKDF {
+				cmdArgs = append(cmdArgs, "-pbkdf2")
+			}
+
+			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 
 			var out bytes.Buffer
 			cmd.Stdout = &out
@@ -137,12 +147,18 @@ func TestDecryptBinaryFromString(t *testing.T) {
 		t.Run(tc.tName, func(t *testing.T) {
 			var out bytes.Buffer
 
-			cmd := exec.Command(
+			cmdArgs := []string{
 				"openssl", "aes-256-cbc",
 				"-pass", fmt.Sprintf("pass:%s", passphrase),
 				"-md", tc.tMdParam,
 				"-in", "/dev/stdin",
-			)
+			}
+
+			if tc.tPBKDF {
+				cmdArgs = append(cmdArgs, "-pbkdf2")
+			}
+
+			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 			cmd.Stdout = &out
 			cmd.Stdin = strings.NewReader(plaintext)
 
@@ -173,12 +189,18 @@ func TestDecryptFromString(t *testing.T) {
 		t.Run(tc.tName, func(t *testing.T) {
 			var out bytes.Buffer
 
-			cmd := exec.Command(
+			cmdArgs := []string{
 				"openssl", "aes-256-cbc",
 				"-base64",
 				"-pass", fmt.Sprintf("pass:%s", passphrase),
 				"-md", tc.tMdParam,
-			)
+			}
+
+			if tc.tPBKDF {
+				cmdArgs = append(cmdArgs, "-pbkdf2")
+			}
+
+			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 			cmd.Stdout = &out
 			cmd.Stdin = strings.NewReader(plaintext)
 
@@ -264,13 +286,19 @@ func TestEncryptToOpenSSL(t *testing.T) {
 
 			var out bytes.Buffer
 
-			cmd := exec.Command(
+			cmdArgs := []string{
 				"openssl", "aes-256-cbc",
 				"-base64", "-d",
 				"-pass", fmt.Sprintf("pass:%s", passphrase),
 				"-md", tc.tMdParam,
 				"-in", "/dev/stdin",
-			)
+			}
+
+			if tc.tPBKDF {
+				cmdArgs = append(cmdArgs, "-pbkdf2")
+			}
+
+			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 			cmd.Stdout = &out
 			cmd.Stdin = bytes.NewReader(enc)
 

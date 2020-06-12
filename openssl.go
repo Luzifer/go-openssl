@@ -28,6 +28,29 @@ type OpenSSLCreds struct {
 	IV  []byte
 }
 
+func (o OpenSSLCreds) equals(i OpenSSLCreds) bool {
+	// If lengths does not match no chance they are equal
+	if len(o.Key) != len(i.Key) || len(o.IV) != len(i.IV) {
+		return false
+	}
+
+	// Compare keys
+	for j := 0; j < len(o.Key); j++ {
+		if o.Key[j] != i.Key[j] {
+			return false
+		}
+	}
+
+	// Compare IV
+	for j := 0; j < len(o.IV); j++ {
+		if o.IV[j] != i.IV[j] {
+			return false
+		}
+	}
+
+	return true
+}
+
 // New instanciates and initializes a new OpenSSL encrypter
 func New() *OpenSSL {
 	return &OpenSSL{

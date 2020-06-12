@@ -4,18 +4,12 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/md5"
 	"crypto/rand"
-	"crypto/sha1"
-	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 )
-
-// CurrentOpenSSLDigestFunc is an alias to the key derivation function used in OpenSSL
-var CurrentOpenSSLDigestFunc = DigestSHA256Sum
 
 // ErrInvalidSalt is returned when a salt with a length of != 8 byte is passed
 var ErrInvalidSalt = errors.New("Salt needs to have exactly 8 byte")
@@ -28,9 +22,10 @@ type OpenSSL struct {
 	openSSLSaltHeader string
 }
 
-type openSSLCreds struct {
-	key []byte
-	iv  []byte
+// OpenSSLCreds holds a key and an IV for encryption methods
+type OpenSSLCreds struct {
+	Key []byte
+	IV  []byte
 }
 
 // New instanciates and initializes a new OpenSSL encrypter
@@ -40,37 +35,13 @@ func New() *OpenSSL {
 	}
 }
 
-// DigestFunc are functions to create a key from the passphrase
-type DigestFunc func([]byte) []byte
-
-// DigestMD5Sum uses the (deprecated) pre-OpenSSL 1.1.0c MD5 digest to create the key
-func DigestMD5Sum(data []byte) []byte {
-	h := md5.New()
-	h.Write(data)
-	return h.Sum(nil)
-}
-
-// DigestSHA1Sum uses SHA1 digest to create the key
-func DigestSHA1Sum(data []byte) []byte {
-	h := sha1.New()
-	h.Write(data)
-	return h.Sum(nil)
-}
-
-// DigestSHA256Sum uses SHA256 digest to create the key which is the default behaviour since OpenSSL 1.1.0c
-func DigestSHA256Sum(data []byte) []byte {
-	h := sha256.New()
-	h.Write(data)
-	return h.Sum(nil)
-}
-
 // DecryptBytes takes a slice of bytes with base64 encoded, encrypted data to decrypt
 // and a key-derivation function. The key-derivation function must match the function
 // used to encrypt the data. (In OpenSSL the value of the `-md` parameter.)
 //
 // You should not just try to loop the digest functions as this will cause a race
 // condition and you will not be able to decrypt your data properly.
-func (o OpenSSL) DecryptBytes(passphrase string, encryptedBase64Data []byte, kdf DigestFunc) ([]byte, error) {
+func (o OpenSSL) DecryptBytes(passphrase string, encryptedBase64Data []byte, cg CredsGenerator) ([]byte, error) {
 	data := make([]byte, base64.StdEncoding.DecodedLen(len(encryptedBase64Data)))
 	n, err := base64.StdEncoding.Decode(data, encryptedBase64Data)
 	if err != nil {
@@ -80,7 +51,7 @@ func (o OpenSSL) DecryptBytes(passphrase string, encryptedBase64Data []byte, kdf
 	// Truncate to real message length
 	data = data[0:n]
 
-	decrypted, err := o.DecryptBinaryBytes(passphrase, data, kdf)
+	decrypted, err := o.DecryptBinaryBytes(passphrase, data, cg)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +64,7 @@ func (o OpenSSL) DecryptBytes(passphrase string, encryptedBase64Data []byte, kdf
 //
 // You should not just try to loop the digest functions as this will cause a race
 // condition and you will not be able to decrypt your data properly.
-func (o OpenSSL) DecryptBinaryBytes(passphrase string, encryptedData []byte, kdf DigestFunc) ([]byte, error) {
+func (o OpenSSL) DecryptBinaryBytes(passphrase string, encryptedData []byte, cg CredsGenerator) ([]byte, error) {
 	if len(encryptedData) < aes.BlockSize {
 		return nil, fmt.Errorf("Data is too short")
 	}
@@ -103,11 +74,11 @@ func (o OpenSSL) DecryptBinaryBytes(passphrase string, encryptedData []byte, kdf
 	}
 	salt := saltHeader[8:]
 
-	creds, err := o.extractOpenSSLCreds([]byte(passphrase), salt, kdf)
+	creds, err := cg([]byte(passphrase), salt)
 	if err != nil {
 		return nil, err
 	}
-	return o.decrypt(creds.key, creds.iv, encryptedData)
+	return o.decrypt(creds.Key, creds.IV, encryptedData)
 }
 
 func (o OpenSSL) decrypt(key, iv, data []byte) ([]byte, error) {
@@ -130,25 +101,25 @@ func (o OpenSSL) decrypt(key, iv, data []byte) ([]byte, error) {
 // EncryptBytes encrypts a slice of bytes that are base64 encoded in a manner compatible to OpenSSL encryption
 // functions using AES-256-CBC as encryption algorithm. This function generates
 // a random salt on every execution.
-func (o OpenSSL) EncryptBytes(passphrase string, plainData []byte, kdf DigestFunc) ([]byte, error) {
+func (o OpenSSL) EncryptBytes(passphrase string, plainData []byte, cg CredsGenerator) ([]byte, error) {
 	salt, err := o.GenerateSalt()
 	if err != nil {
 		return nil, err
 	}
 
-	return o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, plainData, kdf)
+	return o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, plainData, cg)
 }
 
 // EncryptBinaryBytes encrypts a slice of bytes in a manner compatible to OpenSSL encryption
 // functions using AES-256-CBC as encryption algorithm. This function generates
 // a random salt on every execution.
-func (o OpenSSL) EncryptBinaryBytes(passphrase string, plainData []byte, kdf DigestFunc) ([]byte, error) {
+func (o OpenSSL) EncryptBinaryBytes(passphrase string, plainData []byte, cg CredsGenerator) ([]byte, error) {
 	salt, err := o.GenerateSalt()
 	if err != nil {
 		return nil, err
 	}
 
-	return o.EncryptBinaryBytesWithSaltAndDigestFunc(passphrase, salt, plainData, kdf)
+	return o.EncryptBinaryBytesWithSaltAndDigestFunc(passphrase, salt, plainData, cg)
 }
 
 // EncryptBytesWithSaltAndDigestFunc encrypts a slice of bytes that are base64 encoded in a manner compatible to OpenSSL
@@ -163,8 +134,8 @@ func (o OpenSSL) EncryptBinaryBytes(passphrase string, plainData []byte, kdf Dig
 //
 // If you don't have a good reason to use this, please don't! For more information
 // see this: https://en.wikipedia.org/wiki/Salt_(cryptography)#Common_mistakes
-func (o OpenSSL) EncryptBytesWithSaltAndDigestFunc(passphrase string, salt, plainData []byte, hashFunc DigestFunc) ([]byte, error) {
-	enc, err := o.EncryptBinaryBytesWithSaltAndDigestFunc(passphrase, salt, plainData, hashFunc)
+func (o OpenSSL) EncryptBytesWithSaltAndDigestFunc(passphrase string, salt, plainData []byte, cg CredsGenerator) ([]byte, error) {
+	enc, err := o.EncryptBinaryBytesWithSaltAndDigestFunc(passphrase, salt, plainData, cg)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +171,7 @@ func (o OpenSSL) encrypt(key, iv, data []byte) ([]byte, error) {
 //
 // If you don't have a good reason to use this, please don't! For more information
 // see this: https://en.wikipedia.org/wiki/Salt_(cryptography)#Common_mistakes
-func (o OpenSSL) EncryptBinaryBytesWithSaltAndDigestFunc(passphrase string, salt, plainData []byte, hashFunc DigestFunc) ([]byte, error) {
+func (o OpenSSL) EncryptBinaryBytesWithSaltAndDigestFunc(passphrase string, salt, plainData []byte, cg CredsGenerator) ([]byte, error) {
 	if len(salt) != 8 {
 		return nil, ErrInvalidSalt
 	}
@@ -210,39 +181,17 @@ func (o OpenSSL) EncryptBinaryBytesWithSaltAndDigestFunc(passphrase string, salt
 	copy(data[8:], salt)
 	copy(data[aes.BlockSize:], plainData)
 
-	creds, err := o.extractOpenSSLCreds([]byte(passphrase), salt, hashFunc)
+	creds, err := cg([]byte(passphrase), salt)
 	if err != nil {
 		return nil, err
 	}
 
-	enc, err := o.encrypt(creds.key, creds.iv, data)
+	enc, err := o.encrypt(creds.Key, creds.IV, data)
 	if err != nil {
 		return nil, err
 	}
 
 	return enc, nil
-}
-
-// openSSLEvpBytesToKey follows the OpenSSL (undocumented?) convention for extracting the key and IV from passphrase.
-// It uses the EVP_BytesToKey() method which is basically:
-// D_i = HASH^count(D_(i-1) || password || salt) where || denotes concatentaion, until there are sufficient bytes available
-// 48 bytes since we're expecting to handle AES-256, 32bytes for a key and 16bytes for the IV
-func (o OpenSSL) extractOpenSSLCreds(password, salt []byte, hashFunc DigestFunc) (openSSLCreds, error) {
-	var m []byte
-	prev := []byte{}
-	for len(m) < 48 {
-		prev = o.hash(prev, password, salt, hashFunc)
-		m = append(m, prev...)
-	}
-	return openSSLCreds{key: m[:32], iv: m[32:48]}, nil
-}
-
-func (o OpenSSL) hash(prev, password, salt []byte, hashFunc DigestFunc) []byte {
-	a := make([]byte, len(prev)+len(password)+len(salt))
-	copy(a, prev)
-	copy(a[len(prev):], password)
-	copy(a[len(prev)+len(password):], salt)
-	return hashFunc(a)
 }
 
 // GenerateSalt generates a random 8 byte salt

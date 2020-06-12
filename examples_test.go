@@ -8,7 +8,7 @@ func ExampleOpenSSL_EncryptBytes() {
 
 	o := New()
 
-	enc, err := o.EncryptBytes(passphrase, []byte(plaintext), DigestSHA256Sum)
+	enc, err := o.EncryptBytes(passphrase, []byte(plaintext), NewBytesToKeyGenerator(DigestSHA256Sum))
 	if err != nil {
 		fmt.Printf("An error occurred: %s\n", err)
 	}
@@ -22,7 +22,7 @@ func ExampleOpenSSL_DecryptBytes() {
 
 	o := New()
 
-	dec, err := o.DecryptBytes(passphrase, []byte(opensslEncrypted), DigestMD5Sum)
+	dec, err := o.DecryptBytes(passphrase, []byte(opensslEncrypted), NewBytesToKeyGenerator(DigestMD5Sum))
 	if err != nil {
 		fmt.Printf("An error occurred: %s\n", err)
 	}

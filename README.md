@@ -28,10 +28,7 @@ Starting with `v4.0.0` `go-openssl` is capable of using the PBKDF2 key derivatio
 
 ```bash
 # Get the latest version
-go get github.com/Luzifer/go-openssl
-
-# OR get a specific version
-go get gopkg.in/Luzifer/go-openssl.v4
+go get github.com/Luzifer/go-openssl/v4
 ```
 
 ## Usage example
@@ -43,7 +40,7 @@ The usage is quite simple as you don't need any special knowledge about OpenSSL 
 ```go
 import (
   "fmt"
-  openssl "gopkg.in/Luzifer/go-openssl.v4"
+  openssl "github.com/Luzifer/go-openssl/v4"
 )
 
 func main() {
@@ -66,7 +63,7 @@ func main() {
 ```go
 import (
   "fmt"
-  openssl "gopkg.in/Luzifer/go-openssl.v4"
+  openssl "github.com/Luzifer/go-openssl/v4"
 )
 
 func main() {

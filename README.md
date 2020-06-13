@@ -1,4 +1,4 @@
-[![](https://badges.fyi/static/godoc/reference/5272B4)](https://godoc.org/github.com/Luzifer/go-openssl)
+[![](https://badges.fyi/static/godoc/reference/5272B4)](https://pkg.go.dev/github.com/Luzifer/go-openssl/v4)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Luzifer/go-openssl)](https://goreportcard.com/report/github.com/Luzifer/go-openssl)
 ![](https://badges.fyi/github/license/Luzifer/go-openssl)
 ![](https://badges.fyi/github/latest-tag/Luzifer/go-openssl)

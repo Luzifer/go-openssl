@@ -17,9 +17,13 @@ var testTable = []struct {
 	{"MD5", "md5", BytesToKeyMD5, false},
 	{"SHA1", "sha1", BytesToKeySHA1, false},
 	{"SHA256", "sha256", BytesToKeySHA256, false},
+	{"SHA384", "sha384", BytesToKeySHA384, false},
+	{"SHA512", "sha512", BytesToKeySHA512, false},
 	{"PBKDF2_MD5", "md5", PBKDF2MD5, true},
 	{"PBKDF2_SHA1", "sha1", PBKDF2SHA1, true},
 	{"PBKDF2_SHA256", "sha256", PBKDF2SHA256, true},
+	{"PBKDF2_SHA384", "sha384", PBKDF2SHA384, true},
+	{"PBKDF2_SHA512", "sha512", PBKDF2SHA512, true},
 }
 
 func TestBinaryEncryptToDecryptWithCustomSalt(t *testing.T) {

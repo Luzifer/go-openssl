@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/sha512"
 	"hash"
 
 	"golang.org/x/crypto/pbkdf2"
@@ -18,9 +19,13 @@ var (
 	BytesToKeyMD5    = NewBytesToKeyGenerator(md5.New)
 	BytesToKeySHA1   = NewBytesToKeyGenerator(sha1.New)
 	BytesToKeySHA256 = NewBytesToKeyGenerator(sha256.New)
+	BytesToKeySHA384 = NewBytesToKeyGenerator(sha512.New384)
+	BytesToKeySHA512 = NewBytesToKeyGenerator(sha512.New)
 	PBKDF2MD5        = NewPBKDF2Generator(md5.New, DefaultPBKDF2Iterations)
 	PBKDF2SHA1       = NewPBKDF2Generator(sha1.New, DefaultPBKDF2Iterations)
 	PBKDF2SHA256     = NewPBKDF2Generator(sha256.New, DefaultPBKDF2Iterations)
+	PBKDF2SHA384     = NewPBKDF2Generator(sha512.New384, DefaultPBKDF2Iterations)
+	PBKDF2SHA512     = NewPBKDF2Generator(sha512.New, DefaultPBKDF2Iterations)
 )
 
 // openSSLEvpBytesToKey follows the OpenSSL (undocumented?) convention for extracting the key and IV from passphrase.

@@ -1,3 +1,7 @@
+# 4.0.0 / 2020-06-13
+
+  * Breaking: Implement PBKFD2 key derivation (#18)
+
 # 3.1.0 / 2019-04-29
 
   * Add encrypt/decrypt without base64 encoding (thanks [@mcgillowen](https://github.com/mcgillowen))

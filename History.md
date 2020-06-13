@@ -1,3 +1,7 @@
+# 4.1.0 / 2020-06-13
+
+  * Add pre-defined generators and compatibility tests for SHA384 and SHA512
+
 # 4.0.0 / 2020-06-13
 
   * Breaking: Implement PBKFD2 key derivation (#18)

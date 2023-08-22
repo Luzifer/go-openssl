@@ -11,24 +11,61 @@ import (
 	"io"
 )
 
-type decryptReader struct {
+// DecryptReader represents an io.Reader for OpenSSL encrypted data
+type DecryptReader struct {
 	r          *bufio.Reader
 	mode       cipher.BlockMode
 	cg         CredsGenerator
 	passphrase []byte
 }
 
-// NewReader create new openssl stream reader with underlying reader,
-// passphrase and credsGenerator
-func NewReader(r io.Reader, passphrase string, cg CredsGenerator) io.Reader {
-	return &decryptReader{
+// NewReader creates a new OpenSSL stream reader with underlying reader,
+// passphrase and CredsGenerator
+func NewReader(r io.Reader, passphrase string, cg CredsGenerator) *DecryptReader {
+	return &DecryptReader{
 		r:          bufio.NewReader(r),
 		cg:         cg,
 		passphrase: []byte(passphrase),
 	}
 }
 
-func (d *decryptReader) initMode() error {
+// Read implements the io.Reader interface to read from an encrypted
+// datastream
+func (d *DecryptReader) Read(b []byte) (int, error) {
+	if d.mode == nil {
+		if err := d.initMode(); err != nil {
+			return 0, fmt.Errorf("init failed: %w", err)
+		}
+	}
+
+	size := (len(b) / aes.BlockSize) * aes.BlockSize
+
+	if size == 0 {
+		return 0, nil
+	}
+
+	n, err := d.r.Read(b[:size])
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return n, io.EOF
+		}
+		return n, fmt.Errorf("reading from underlying reader: %w", err)
+	}
+
+	d.mode.CryptBlocks(b[:n], b[:n])
+
+	// AS OpenSSL enforces the encrypted data to have a length of a
+	// multpliple of the AES BlockSize we will always read full blocks.
+	// Therefore we can check whether the next block exists or yields
+	// an io.EOF error. If it does we need to remove the PKCS7 padding.
+	if _, err = d.r.Peek(aes.BlockSize); errors.Is(err, io.EOF) {
+		n -= int(b[n-1])
+	}
+
+	return n, nil
+}
+
+func (d *DecryptReader) initMode() error {
 	if d.mode != nil {
 		return nil
 	}
@@ -57,35 +94,8 @@ func (d *decryptReader) initMode() error {
 	return nil
 }
 
-func (d *decryptReader) Read(b []byte) (int, error) {
-	if d.mode == nil {
-		if err := d.initMode(); err != nil {
-			return 0, fmt.Errorf("init failed: %w", err)
-		}
-	}
-
-	size := (len(b) / aes.BlockSize) * aes.BlockSize
-
-	if size == 0 {
-		return 0, nil
-	}
-
-	n, err := d.r.Read(b[:size])
-	if err != nil {
-		return n, err
-	}
-
-	d.mode.CryptBlocks(b[:n], b[:n])
-
-	// check is last block of data, then remove padding.
-	if _, err = d.r.Peek(aes.BlockSize); errors.Is(err, io.EOF) {
-		n -= int(b[n-1])
-	}
-
-	return n, nil
-}
-
-type encryptWriter struct {
+// EncryptWriter represents an io.WriteCloser info OpenSSL encrypted data
+type EncryptWriter struct {
 	mode       cipher.BlockMode
 	w          io.Writer
 	cg         CredsGenerator
@@ -94,47 +104,22 @@ type encryptWriter struct {
 }
 
 // NewWriter create new openssl stream writer with underlying writer,
-// passphrase and credsGenerator.
-// Make sure close the writer after write all data, that will flush all
-// remaining data and padding to underlying.
-func NewWriter(w io.Writer, passphrase string, cg CredsGenerator) io.WriteCloser {
-	return &encryptWriter{
+// passphrase and CredsGenerator.
+//
+// Make sure close the writer after writing all data, to ensure the
+// remaining data is padded and written to the underlying writer.
+func NewWriter(w io.Writer, passphrase string, cg CredsGenerator) *EncryptWriter {
+	return &EncryptWriter{
 		w:          w,
 		cg:         cg,
 		passphrase: []byte(passphrase),
 	}
 }
 
-func (e *encryptWriter) initMode() error {
-	if e.mode != nil {
-		return nil
-	}
-
-	salt := make([]byte, 8) // Generate an 8 byte salt
-	_, err := io.ReadFull(rand.Reader, salt)
-	if err != nil {
-		return fmt.Errorf("read salt failed: %w", err)
-	}
-
-	_, err = e.w.Write(append([]byte("Salted__"), salt...))
-	if err != nil {
-		return fmt.Errorf("write salt to underlying writer failed: %w", err)
-	}
-
-	creds, err := e.cg(e.passphrase, salt)
-	if err != nil {
-		return err
-	}
-
-	c, err := aes.NewCipher(creds.Key)
-	if err != nil {
-		return fmt.Errorf("new aes cipher failed: %w", err)
-	}
-	e.mode = cipher.NewCBCEncrypter(c, creds.IV)
-	return nil
-}
-
-func (e *encryptWriter) Write(b []byte) (int, error) {
+// Write implements io.WriteCloser to write encrypted data into the
+// underlying writer. The Write call may keep data in the buffer and
+// needs to flush them through the Close function.
+func (e *EncryptWriter) Write(b []byte) (int, error) {
 	if e.mode == nil {
 		if err := e.initMode(); err != nil {
 			return 0, err
@@ -177,22 +162,51 @@ func (e *encryptWriter) Write(b []byte) (int, error) {
 }
 
 // Close writes any buffered data to the underlying io.Writer.
-// make sure close the writer after write all data.
-func (e *encryptWriter) Close() error {
+// Make sure close the writer after write all data.
+func (e *EncryptWriter) Close() error {
 	padlen := 1
 	for ((len(e.buf) + padlen) % aes.BlockSize) != 0 {
 		padlen++
 	}
 
 	pad := bytes.Repeat([]byte{byte(padlen)}, padlen)
-
 	pad = append(e.buf, pad...)
+
 	e.buf = nil
 	e.mode.CryptBlocks(pad, pad)
-	_, err := e.w.Write(pad)
-	if err != nil {
+
+	if _, err := e.w.Write(pad); err != nil {
 		return fmt.Errorf("write padding to underlying writer failed: %w", err)
 	}
 
-	return err
+	return nil
+}
+
+func (e *EncryptWriter) initMode() error {
+	if e.mode != nil {
+		return nil
+	}
+
+	salt := make([]byte, 8) // Generate an 8 byte salt
+	_, err := io.ReadFull(rand.Reader, salt)
+	if err != nil {
+		return fmt.Errorf("read salt failed: %w", err)
+	}
+
+	_, err = e.w.Write(append([]byte("Salted__"), salt...))
+	if err != nil {
+		return fmt.Errorf("write salt to underlying writer failed: %w", err)
+	}
+
+	creds, err := e.cg(e.passphrase, salt)
+	if err != nil {
+		return err
+	}
+
+	c, err := aes.NewCipher(creds.Key)
+	if err != nil {
+		return fmt.Errorf("new aes cipher failed: %w", err)
+	}
+	e.mode = cipher.NewCBCEncrypter(c, creds.IV)
+	return nil
 }

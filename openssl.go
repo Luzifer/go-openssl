@@ -12,7 +12,7 @@ import (
 )
 
 // ErrInvalidSalt is returned when a salt with a length of != 8 byte is passed
-var ErrInvalidSalt = errors.New("Salt needs to have exactly 8 byte")
+var ErrInvalidSalt = errors.New("salt needs to have exactly 8 byte")
 
 // OpenSSL is a helper to generate OpenSSL compatible encryption
 // with autmatic IV derivation and storage. As long as the key is known all
@@ -68,7 +68,7 @@ func (o OpenSSL) DecryptBytes(passphrase string, encryptedBase64Data []byte, cg 
 	data := make([]byte, base64.StdEncoding.DecodedLen(len(encryptedBase64Data)))
 	n, err := base64.StdEncoding.Decode(data, encryptedBase64Data)
 	if err != nil {
-		return nil, fmt.Errorf("Could not decode data: %s", err)
+		return nil, fmt.Errorf("could not decode data: %s", err)
 	}
 
 	// Truncate to real message length
@@ -89,11 +89,11 @@ func (o OpenSSL) DecryptBytes(passphrase string, encryptedBase64Data []byte, cg 
 // condition and you will not be able to decrypt your data properly.
 func (o OpenSSL) DecryptBinaryBytes(passphrase string, encryptedData []byte, cg CredsGenerator) ([]byte, error) {
 	if len(encryptedData) < aes.BlockSize {
-		return nil, fmt.Errorf("Data is too short")
+		return nil, fmt.Errorf("data is too short")
 	}
 	saltHeader := encryptedData[:aes.BlockSize]
 	if string(saltHeader[:8]) != o.openSSLSaltHeader {
-		return nil, fmt.Errorf("Does not appear to have been encrypted with OpenSSL, salt header missing")
+		return nil, fmt.Errorf("does not appear to have been encrypted with OpenSSL, salt header missing")
 	}
 	salt := saltHeader[8:]
 

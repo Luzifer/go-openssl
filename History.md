@@ -1,3 +1,10 @@
+# 4.2.0 / 2023-08-22
+
+  * Add support for stream writer and reader (#26)
+  * [ci] Add automated code checks through Github Actions
+  * [ci] Fix linter errors, simplify tests
+  * [docs] Update documentation to use modules format
+
 # 4.1.0 / 2020-06-13
 
   * Add pre-defined generators and compatibility tests for SHA384 and SHA512

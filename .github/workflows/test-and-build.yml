@@ -1,0 +1,50 @@
+---
+
+name: test-and-build
+on:
+  push:
+    branches: ['*']
+    tags: ['v*']
+
+jobs:
+  test-and-build:
+    defaults:
+      run:
+        shell: bash
+
+    container:
+      image: luzifer/archlinux
+      env:
+        CGO_ENABLED: 0
+        GOPATH: /go
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Enable custom AUR package repo
+        run: echo -e "[luzifer]\nSigLevel = Never\nServer = https://archrepo.hub.luzifer.io/\$arch" >>/etc/pacman.conf
+
+      - name: Install required packages
+        run: |
+          pacman -Syy --noconfirm \
+            git \
+            go \
+            golangci-lint-bin \
+            make \
+            trivy
+
+      - uses: actions/checkout@v3
+
+      - name: Marking workdir safe
+        run: git config --global --add safe.directory /__w/go-openssl/go-openssl
+
+      - name: Lint and test code
+        run: make lint test
+
+      - name: Record benchmark
+        run: make benchmark
+
+      - name: Execute Trivy scan
+        run: make trivy
+
+...

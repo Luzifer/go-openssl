@@ -1,3 +1,5 @@
+// Package openssl contains a pure Go implementation of an OpenSSL
+// compatible encryption / decryption
 package openssl
 
 import (
@@ -10,6 +12,8 @@ import (
 	"fmt"
 	"io"
 )
+
+const opensslSaltLength = 8
 
 // ErrInvalidSalt is returned when a salt with a length of != 8 byte is passed
 var ErrInvalidSalt = errors.New("salt needs to have exactly 8 byte")
@@ -68,7 +72,7 @@ func (o OpenSSL) DecryptBytes(passphrase string, encryptedBase64Data []byte, cg 
 	data := make([]byte, base64.StdEncoding.DecodedLen(len(encryptedBase64Data)))
 	n, err := base64.StdEncoding.Decode(data, encryptedBase64Data)
 	if err != nil {
-		return nil, fmt.Errorf("could not decode data: %s", err)
+		return nil, fmt.Errorf("decoding data: %w", err)
 	}
 
 	// Truncate to real message length
@@ -89,7 +93,7 @@ func (o OpenSSL) DecryptBytes(passphrase string, encryptedBase64Data []byte, cg 
 // condition and you will not be able to decrypt your data properly.
 func (o OpenSSL) DecryptBinaryBytes(passphrase string, encryptedData []byte, cg CredsGenerator) ([]byte, error) {
 	if len(encryptedData) < aes.BlockSize {
-		return nil, fmt.Errorf("data is too short")
+		return nil, fmt.Errorf("data too short")
 	}
 	saltHeader := encryptedData[:aes.BlockSize]
 	if string(saltHeader[:8]) != o.openSSLSaltHeader {
@@ -110,7 +114,7 @@ func (o OpenSSL) decrypt(key, iv, data []byte) ([]byte, error) {
 	}
 	c, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating AES cipher: %w", err)
 	}
 	cbc := cipher.NewCBCDecrypter(c, iv)
 	cbc.CryptBlocks(data[aes.BlockSize:], data[aes.BlockSize:])
@@ -174,7 +178,7 @@ func (o OpenSSL) encrypt(key, iv, data []byte) ([]byte, error) {
 
 	c, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating AES cipher: %w", err)
 	}
 	cbc := cipher.NewCBCEncrypter(c, iv)
 	cbc.CryptBlocks(padded[aes.BlockSize:], padded[aes.BlockSize:])
@@ -195,13 +199,13 @@ func (o OpenSSL) encrypt(key, iv, data []byte) ([]byte, error) {
 // If you don't have a good reason to use this, please don't! For more information
 // see this: https://en.wikipedia.org/wiki/Salt_(cryptography)#Common_mistakes
 func (o OpenSSL) EncryptBinaryBytesWithSaltAndDigestFunc(passphrase string, salt, plainData []byte, cg CredsGenerator) ([]byte, error) {
-	if len(salt) != 8 {
+	if len(salt) != opensslSaltLength {
 		return nil, ErrInvalidSalt
 	}
 
 	data := make([]byte, len(plainData)+aes.BlockSize)
 	copy(data[0:], o.openSSLSaltHeader)
-	copy(data[8:], salt)
+	copy(data[len(o.openSSLSaltHeader):], salt)
 	copy(data[aes.BlockSize:], plainData)
 
 	creds, err := cg([]byte(passphrase), salt)
@@ -218,11 +222,11 @@ func (o OpenSSL) EncryptBinaryBytesWithSaltAndDigestFunc(passphrase string, salt
 }
 
 // GenerateSalt generates a random 8 byte salt
-func (o OpenSSL) GenerateSalt() ([]byte, error) {
-	salt := make([]byte, 8) // Generate an 8 byte salt
+func (OpenSSL) GenerateSalt() ([]byte, error) {
+	salt := make([]byte, opensslSaltLength) // Generate an 8 byte salt
 	_, err := io.ReadFull(rand.Reader, salt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reading random salt: %w", err)
 	}
 
 	return salt, nil
@@ -239,7 +243,7 @@ func (o OpenSSL) MustGenerateSalt() []byte {
 }
 
 // pkcs7Pad appends padding.
-func (o OpenSSL) pkcs7Pad(data []byte, blocklen int) ([]byte, error) {
+func (OpenSSL) pkcs7Pad(data []byte, blocklen int) ([]byte, error) {
 	if blocklen <= 0 {
 		return nil, fmt.Errorf("invalid blocklen %d", blocklen)
 	}
@@ -253,7 +257,7 @@ func (o OpenSSL) pkcs7Pad(data []byte, blocklen int) ([]byte, error) {
 }
 
 // pkcs7Unpad returns slice of the original data without padding.
-func (o OpenSSL) pkcs7Unpad(data []byte, blocklen int) ([]byte, error) {
+func (OpenSSL) pkcs7Unpad(data []byte, blocklen int) ([]byte, error) {
 	if blocklen <= 0 {
 		return nil, fmt.Errorf("invalid blocklen %d", blocklen)
 	}

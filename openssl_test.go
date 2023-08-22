@@ -6,6 +6,14 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+const (
+	testPassphrase = "z4yH36a6zerhfE5427ZV" //#nosec G101 -- Is hardcoded passphrase but only for testing purposes
+	testPlaintext  = "hallowelt"
 )
 
 var testTable = []struct {
@@ -27,72 +35,48 @@ var testTable = []struct {
 }
 
 func TestBinaryEncryptToDecryptWithCustomSalt(t *testing.T) {
-	plaintext := "hallowelt"
-	passphrase := "z4yH36a6zerhfE5427ZV"
 	salt := []byte("saltsalt")
 
 	o := New()
 
-	enc, err := o.EncryptBinaryBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), BytesToKeySHA256)
-	if err != nil {
-		t.Fatalf("Test errored at encrypt: %s", err)
-	}
+	enc, err := o.EncryptBinaryBytesWithSaltAndDigestFunc(testPassphrase, salt, []byte(testPlaintext), BytesToKeySHA256)
+	require.NoError(t, err)
 
-	dec, err := o.DecryptBinaryBytes(passphrase, enc, BytesToKeySHA256)
-	if err != nil {
-		t.Fatalf("Test errored at decrypt: %s", err)
-	}
+	dec, err := o.DecryptBinaryBytes(testPassphrase, enc, BytesToKeySHA256)
+	require.NoError(t, err)
 
-	if string(dec) != plaintext {
-		t.Errorf("Decrypted text did not match input.")
-	}
+	assert.Equal(t, testPlaintext, string(dec))
 }
 
 func TestBinaryEncryptToDecrypt(t *testing.T) {
-	plaintext := "hallowelt"
-	passphrase := "z4yH36a6zerhfE5427ZV"
-
 	o := New()
 
-	enc, err := o.EncryptBinaryBytes(passphrase, []byte(plaintext), BytesToKeySHA256)
-	if err != nil {
-		t.Fatalf("Test errored at encrypt: %s", err)
-	}
+	enc, err := o.EncryptBinaryBytes(testPassphrase, []byte(testPlaintext), BytesToKeySHA256)
+	require.NoError(t, err)
 
-	dec, err := o.DecryptBinaryBytes(passphrase, enc, BytesToKeySHA256)
-	if err != nil {
-		t.Fatalf("Test errored at decrypt: %s", err)
-	}
+	dec, err := o.DecryptBinaryBytes(testPassphrase, enc, BytesToKeySHA256)
+	require.NoError(t, err)
 
-	if string(dec) != plaintext {
-		t.Errorf("Decrypted text did not match input.")
-	}
+	assert.Equal(t, testPlaintext, string(dec))
 }
 
 func TestBinaryEncryptToOpenSSL(t *testing.T) {
-	plaintext := "hallowelt"
-	passphrase := "z4yH36a6zerhfE5427ZV"
-
 	o := New()
 
 	for _, tc := range testTable {
 		t.Run(tc.tName, func(t *testing.T) {
 			salt, err := o.GenerateSalt()
-			if err != nil {
-				t.Fatalf("Failed to generate salt: %v", err)
-			}
+			require.NoError(t, err)
 
-			enc, err := o.EncryptBinaryBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), tc.tMdFunc)
-			if err != nil {
-				t.Fatalf("Test errored at encrypt: %v", err)
-			}
+			enc, err := o.EncryptBinaryBytesWithSaltAndDigestFunc(testPassphrase, salt, []byte(testPlaintext), tc.tMdFunc)
+			require.NoError(t, err)
 
 			// Need to specify /dev/stdin as file so that we can pass in binary
 			// data to openssl without creating a file
 			cmdArgs := []string{
 				"openssl", "aes-256-cbc",
 				"-d",
-				"-pass", fmt.Sprintf("pass:%s", passphrase),
+				"-pass", fmt.Sprintf("pass:%s", testPassphrase),
 				"-md", tc.tMdParam,
 				"-in", "/dev/stdin",
 			}
@@ -101,20 +85,16 @@ func TestBinaryEncryptToOpenSSL(t *testing.T) {
 				cmdArgs = append(cmdArgs, "-pbkdf2")
 			}
 
-			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...) //#nosec:G204 -- Hardcoded tests, this is fine
 
 			var out bytes.Buffer
 			cmd.Stdout = &out
 			cmd.Stdin = bytes.NewBuffer(enc)
 
 			err = cmd.Run()
-			if err != nil {
-				t.Errorf("OpenSSL errored: %v", err)
-			}
+			require.NoError(t, err)
 
-			if out.String() != plaintext {
-				t.Errorf("OpenSSL output did not match input.\nOutput was: %s", out.String())
-			}
+			assert.Equal(t, testPlaintext, out.String())
 		})
 	}
 }
@@ -127,24 +107,15 @@ func TestBinaryEncryptWithSaltShouldHaveSameOutput(t *testing.T) {
 	o := New()
 
 	enc1, err := o.EncryptBinaryBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), BytesToKeySHA256)
-	if err != nil {
-		t.Fatalf("Test errored at encrypt: %s", err)
-	}
+	require.NoError(t, err)
 
 	enc2, err := o.EncryptBinaryBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), BytesToKeySHA256)
-	if err != nil {
-		t.Fatalf("Test errored at encrypt: %s", err)
-	}
+	require.NoError(t, err)
 
-	if string(enc1) != string(enc2) {
-		t.Errorf("Encrypted outputs are not same.")
-	}
+	assert.Equal(t, enc1, enc2)
 }
 
 func TestDecryptBinaryFromString(t *testing.T) {
-	plaintext := "hallowelt"
-	passphrase := "z4yH36a6zerhfE5427ZV"
-
 	o := New()
 
 	for _, tc := range testTable {
@@ -153,7 +124,7 @@ func TestDecryptBinaryFromString(t *testing.T) {
 
 			cmdArgs := []string{
 				"openssl", "aes-256-cbc",
-				"-pass", fmt.Sprintf("pass:%s", passphrase),
+				"-pass", fmt.Sprintf("pass:%s", testPassphrase),
 				"-md", tc.tMdParam,
 				"-in", "/dev/stdin",
 			}
@@ -162,31 +133,23 @@ func TestDecryptBinaryFromString(t *testing.T) {
 				cmdArgs = append(cmdArgs, "-pbkdf2")
 			}
 
-			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...) //#nosec:G204 -- Hardcoded tests, this is fine
 			cmd.Stdout = &out
-			cmd.Stdin = strings.NewReader(plaintext)
+			cmd.Stdin = strings.NewReader(testPlaintext)
 
-			if err := cmd.Run(); err != nil {
-				t.Fatalf("Running openssl CLI failed: %v", err)
-			}
+			require.NoError(t, cmd.Run())
 
-			data, err := o.DecryptBinaryBytes(passphrase, out.Bytes(), tc.tMdFunc)
-			if err != nil {
-				t.Fatalf("Decryption failed: %v", err)
-			}
+			data, err := o.DecryptBinaryBytes(testPassphrase, out.Bytes(), tc.tMdFunc)
+			require.NoError(t, err)
 
-			if string(data) != plaintext {
-				t.Logf("Data: %s\nPlaintext: %s", string(data), plaintext)
-				t.Errorf("Decryption output did not equal expected output.")
+			if !assert.Equal(t, testPlaintext, string(data)) {
+				t.Logf("Data: %s\nPlaintext: %s", string(data), testPlaintext)
 			}
 		})
 	}
 }
 
 func TestDecryptFromString(t *testing.T) {
-	plaintext := "hallowelt"
-	passphrase := "z4yH36a6zerhfE5427ZV"
-
 	o := New()
 
 	for _, tc := range testTable {
@@ -196,7 +159,7 @@ func TestDecryptFromString(t *testing.T) {
 			cmdArgs := []string{
 				"openssl", "aes-256-cbc",
 				"-base64",
-				"-pass", fmt.Sprintf("pass:%s", passphrase),
+				"-pass", fmt.Sprintf("pass:%s", testPassphrase),
 				"-md", tc.tMdParam,
 			}
 
@@ -204,87 +167,58 @@ func TestDecryptFromString(t *testing.T) {
 				cmdArgs = append(cmdArgs, "-pbkdf2")
 			}
 
-			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...) //#nosec:G204 -- Hardcoded tests, this is fine
 			cmd.Stdout = &out
-			cmd.Stdin = strings.NewReader(plaintext)
+			cmd.Stdin = strings.NewReader(testPlaintext)
 
-			if err := cmd.Run(); err != nil {
-				t.Fatalf("Running openssl CLI failed: %v", err)
-			}
+			require.NoError(t, cmd.Run())
 
-			data, err := o.DecryptBytes(passphrase, out.Bytes(), tc.tMdFunc)
-			if err != nil {
-				t.Fatalf("Decryption failed: %v", err)
-			}
+			data, err := o.DecryptBytes(testPassphrase, out.Bytes(), tc.tMdFunc)
+			require.NoError(t, err)
 
-			if string(data) != plaintext {
-				t.Logf("Data: %s\nPlaintext: %s", string(data), plaintext)
-				t.Errorf("Decryption output did not equal expected output.")
+			if !assert.Equal(t, testPlaintext, string(data)) {
+				t.Logf("Data: %s\nPlaintext: %s", string(data), testPlaintext)
 			}
 		})
 	}
 }
 
 func TestEncryptToDecrypt(t *testing.T) {
-	plaintext := "hallowelt"
-	passphrase := "z4yH36a6zerhfE5427ZV"
-
 	o := New()
 
-	enc, err := o.EncryptBytes(passphrase, []byte(plaintext), BytesToKeySHA256)
-	if err != nil {
-		t.Fatalf("Test errored at encrypt: %s", err)
-	}
+	enc, err := o.EncryptBytes(testPassphrase, []byte(testPlaintext), BytesToKeySHA256)
+	require.NoError(t, err)
 
-	dec, err := o.DecryptBytes(passphrase, enc, BytesToKeySHA256)
-	if err != nil {
-		t.Fatalf("Test errored at decrypt: %s", err)
-	}
+	dec, err := o.DecryptBytes(testPassphrase, enc, BytesToKeySHA256)
+	require.NoError(t, err)
 
-	if string(dec) != plaintext {
-		t.Errorf("Decrypted text did not match input.")
-	}
+	assert.Equal(t, testPlaintext, string(dec))
 }
 
 func TestEncryptToDecryptWithCustomSalt(t *testing.T) {
-	plaintext := "hallowelt"
-	passphrase := "z4yH36a6zerhfE5427ZV"
 	salt := []byte("saltsalt")
 
 	o := New()
 
-	enc, err := o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), BytesToKeySHA256)
-	if err != nil {
-		t.Fatalf("Test errored at encrypt: %s", err)
-	}
+	enc, err := o.EncryptBytesWithSaltAndDigestFunc(testPassphrase, salt, []byte(testPlaintext), BytesToKeySHA256)
+	require.NoError(t, err)
 
-	dec, err := o.DecryptBytes(passphrase, enc, BytesToKeySHA256)
-	if err != nil {
-		t.Fatalf("Test errored at decrypt: %s", err)
-	}
+	dec, err := o.DecryptBytes(testPassphrase, enc, BytesToKeySHA256)
+	require.NoError(t, err)
 
-	if string(dec) != plaintext {
-		t.Errorf("Decrypted text did not match input.")
-	}
+	assert.Equal(t, testPlaintext, string(dec))
 }
 
 func TestEncryptToOpenSSL(t *testing.T) {
-	plaintext := "hallowelt"
-	passphrase := "z4yH36a6zerhfE5427ZV"
-
 	for _, tc := range testTable {
 		t.Run(tc.tName, func(t *testing.T) {
 			o := New()
 
 			salt, err := o.GenerateSalt()
-			if err != nil {
-				t.Fatalf("Failed to generate salt: %s", err)
-			}
+			require.NoError(t, err)
 
-			enc, err := o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), tc.tMdFunc)
-			if err != nil {
-				t.Fatalf("Test errored at encrypt (%s): %s", tc.tMdParam, err)
-			}
+			enc, err := o.EncryptBytesWithSaltAndDigestFunc(testPassphrase, salt, []byte(testPlaintext), tc.tMdFunc)
+			require.NoError(t, err)
 
 			enc = append(enc, '\n')
 
@@ -293,7 +227,7 @@ func TestEncryptToOpenSSL(t *testing.T) {
 			cmdArgs := []string{
 				"openssl", "aes-256-cbc",
 				"-base64", "-d",
-				"-pass", fmt.Sprintf("pass:%s", passphrase),
+				"-pass", fmt.Sprintf("pass:%s", testPassphrase),
 				"-md", tc.tMdParam,
 				"-in", "/dev/stdin",
 			}
@@ -302,18 +236,13 @@ func TestEncryptToOpenSSL(t *testing.T) {
 				cmdArgs = append(cmdArgs, "-pbkdf2")
 			}
 
-			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...) //#nosec:G204 -- Hardcoded tests, this is fine
 			cmd.Stdout = &out
 			cmd.Stdin = bytes.NewReader(enc)
 
-			err = cmd.Run()
-			if err != nil {
-				t.Errorf("OpenSSL errored (%s): %s", tc.tMdParam, err)
-			}
+			require.NoError(t, cmd.Run())
 
-			if out.String() != plaintext {
-				t.Errorf("OpenSSL output did not match input.\nOutput was (%s): %s", tc.tMdParam, out.String())
-			}
+			assert.Equal(t, testPlaintext, out.String())
 		})
 	}
 }
@@ -326,18 +255,12 @@ func TestEncryptWithSaltShouldHaveSameOutput(t *testing.T) {
 	o := New()
 
 	enc1, err := o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), BytesToKeySHA256)
-	if err != nil {
-		t.Fatalf("Test errored at encrypt: %s", err)
-	}
+	require.NoError(t, err)
 
 	enc2, err := o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), BytesToKeySHA256)
-	if err != nil {
-		t.Fatalf("Test errored at encrypt: %s", err)
-	}
+	require.NoError(t, err)
 
-	if string(enc1) != string(enc2) {
-		t.Errorf("Encrypted outputs are not same.")
-	}
+	assert.Equal(t, enc1, enc2)
 }
 
 func TestGenerateSalt(t *testing.T) {
@@ -347,36 +270,27 @@ func TestGenerateSalt(t *testing.T) {
 
 	for i := 0; i < 1000; i++ {
 		salt, err := o.GenerateSalt()
-		if err != nil {
-			t.Fatalf("Failed to generate salt: %s", err)
-		}
+		require.NoError(t, err)
 
 		for _, ks := range knownSalts {
-			if bytes.Equal(ks, salt) {
-				t.Errorf("Duplicate salt detected")
-			}
+			assert.NotEqual(t, ks, salt)
 			knownSalts = append(knownSalts, salt)
 		}
 	}
 }
 
 func TestSaltValidation(t *testing.T) {
-	plaintext := "hallowelt"
-	passphrase := "z4yH36a6zerhfE5427ZV"
-
+	var err error
 	o := New()
 
-	if _, err := o.EncryptBytesWithSaltAndDigestFunc(passphrase, []byte("12345"), []byte(plaintext), BytesToKeySHA256); err != ErrInvalidSalt {
-		t.Errorf("5-character salt was accepted, needs to have 8 character")
-	}
+	_, err = o.EncryptBytesWithSaltAndDigestFunc(testPassphrase, []byte("12345"), []byte(testPlaintext), BytesToKeySHA256)
+	assert.ErrorIs(t, err, ErrInvalidSalt)
 
-	if _, err := o.EncryptBytesWithSaltAndDigestFunc(passphrase, []byte("1234567890"), []byte(plaintext), BytesToKeySHA256); err != ErrInvalidSalt {
-		t.Errorf("10-character salt was accepted, needs to have 8 character")
-	}
+	_, err = o.EncryptBytesWithSaltAndDigestFunc(testPassphrase, []byte("1234567890"), []byte(testPlaintext), BytesToKeySHA256)
+	assert.ErrorIs(t, err, ErrInvalidSalt)
 
-	if _, err := o.EncryptBytesWithSaltAndDigestFunc(passphrase, []byte{0xcb, 0xd5, 0x1a, 0x3, 0x84, 0xba, 0xa8, 0xc8}, []byte(plaintext), BytesToKeySHA256); err == ErrInvalidSalt {
-		t.Errorf("Salt with 8 byte unprintable characters was not accepted")
-	}
+	_, err = o.EncryptBytesWithSaltAndDigestFunc(testPassphrase, []byte{0xcb, 0xd5, 0x1a, 0x3, 0x84, 0xba, 0xa8, 0xc8}, []byte(testPlaintext), BytesToKeySHA256)
+	assert.NoError(t, err)
 }
 
 //
@@ -384,11 +298,11 @@ func TestSaltValidation(t *testing.T) {
 //
 
 func benchmarkDecrypt(ciphertext []byte, cg CredsGenerator, b *testing.B) {
-	passphrase := "z4yH36a6zerhfE5427ZV"
 	o := New()
 
 	for n := 0; n < b.N; n++ {
-		o.DecryptBytes(passphrase, ciphertext, cg)
+		_, err := o.DecryptBytes(testPassphrase, ciphertext, cg)
+		require.NoError(b, err)
 	}
 }
 
@@ -405,30 +319,31 @@ func BenchmarkDecryptSHA256(b *testing.B) {
 }
 
 func benchmarkEncrypt(plaintext string, cg CredsGenerator, b *testing.B) {
-	passphrase := "z4yH36a6zerhfE5427ZV"
 	o := New()
 	salt, _ := o.GenerateSalt()
 
 	for n := 0; n < b.N; n++ {
-		o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, []byte(plaintext), cg)
+		_, err := o.EncryptBytesWithSaltAndDigestFunc(testPassphrase, salt, []byte(plaintext), cg)
+		require.NoError(b, err)
 	}
 }
 
 func BenchmarkEncryptMD5(b *testing.B) {
-	benchmarkEncrypt("hallowelt", BytesToKeyMD5, b)
+	benchmarkEncrypt(testPlaintext, BytesToKeyMD5, b)
 }
 
 func BenchmarkEncryptSHA1(b *testing.B) {
-	benchmarkEncrypt("hallowelt", BytesToKeySHA1, b)
+	benchmarkEncrypt(testPlaintext, BytesToKeySHA1, b)
 }
 
 func BenchmarkEncryptSHA256(b *testing.B) {
-	benchmarkEncrypt("hallowelt", BytesToKeySHA256, b)
+	benchmarkEncrypt(testPlaintext, BytesToKeySHA256, b)
 }
 
 func BenchmarkGenerateSalt(b *testing.B) {
 	o := New()
 	for n := 0; n < b.N; n++ {
-		o.GenerateSalt()
+		_, err := o.GenerateSalt()
+		require.NoError(b, err)
 	}
 }

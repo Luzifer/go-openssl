@@ -187,7 +187,7 @@ func (e *EncryptWriter) initMode() error {
 		return nil
 	}
 
-	salt := make([]byte, 8) // Generate an 8 byte salt
+	salt := make([]byte, opensslSaltLength) // Generate an 8 byte salt
 	_, err := io.ReadFull(rand.Reader, salt)
 	if err != nil {
 		return fmt.Errorf("read salt failed: %w", err)

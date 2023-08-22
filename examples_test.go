@@ -2,6 +2,7 @@ package openssl
 
 import "fmt"
 
+// #nosec G101 -- Contains harcoded test passphrase
 func ExampleOpenSSL_EncryptBytes() {
 	plaintext := "Hello World!"
 	passphrase := "z4yH36a6zerhfE5427ZV"
@@ -16,6 +17,7 @@ func ExampleOpenSSL_EncryptBytes() {
 	fmt.Printf("Encrypted text: %s\n", string(enc))
 }
 
+// #nosec G101 -- Contains harcoded test passphrase
 func ExampleOpenSSL_DecryptBytes() {
 	opensslEncrypted := "U2FsdGVkX19ZM5qQJGe/d5A/4pccgH+arBGTp+QnWPU="
 	passphrase := "z4yH36a6zerhfE5427ZV"

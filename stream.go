@@ -17,6 +17,8 @@ type DecryptReader struct {
 	mode       cipher.BlockMode
 	cg         CredsGenerator
 	passphrase []byte
+
+	buf bytes.Buffer
 }
 
 // NewReader creates a new OpenSSL stream reader with underlying reader,
@@ -38,31 +40,57 @@ func (d *DecryptReader) Read(b []byte) (int, error) {
 		}
 	}
 
-	size := (len(b) / aes.BlockSize) * aes.BlockSize
+	n, err := d.r.Read(b)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return n, fmt.Errorf("reading from underlying reader: %w", err)
+	}
+
+	// write original data to buffer first
+	if _, err := d.buf.Write(b[:n]); err != nil {
+		return 0, fmt.Errorf("write bytes to buf failed: %w", err)
+	}
+
+	realSize := len(b)
+	if d.buf.Len() < realSize {
+		realSize = d.buf.Len()
+	}
+
+	size := (realSize / aes.BlockSize) * aes.BlockSize
 
 	if size == 0 {
 		return 0, nil
 	}
 
-	n, err := d.r.Read(b[:size])
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return n, io.EOF
-		}
-		return n, fmt.Errorf("reading from underlying reader: %w", err)
+	// read encrypted data from buffer
+	if _, err := io.ReadFull(&d.buf, b[:size]); err != nil {
+		return size, fmt.Errorf("reading from underlying reader: %w", err)
 	}
 
-	d.mode.CryptBlocks(b[:n], b[:n])
+	d.mode.CryptBlocks(b[:size], b[:size])
 
 	// AS OpenSSL enforces the encrypted data to have a length of a
-	// multpliple of the AES BlockSize we will always read full blocks.
+	// multiple of the AES BlockSize we will always read full blocks.
 	// Therefore we can check whether the next block exists or yields
 	// an io.EOF error. If it does we need to remove the PKCS7 padding.
-	if _, err = d.r.Peek(aes.BlockSize); errors.Is(err, io.EOF) {
-		n -= int(b[n-1])
+	if _, err := d.r.Peek(aes.BlockSize); errors.Is(err, io.EOF) {
+		if _, err := io.Copy(&d.buf, d.r); err != nil {
+			return size, fmt.Errorf("copy remain data to buf failed: %w", err)
+		}
+
+		if d.buf.Len() == 0 {
+			size -= int(b[size-1])
+			if size < 0 {
+				return 0, fmt.Errorf("incorrect padding size: %d", size)
+			}
+			return size, io.EOF
+		}
+
+		if d.buf.Len()%aes.BlockSize != 0 {
+			return size, fmt.Errorf("incorrect encrypted data size: %d", d.buf.Len())
+		}
 	}
 
-	return n, nil
+	return size, nil
 }
 
 func (d *DecryptReader) initMode() error {

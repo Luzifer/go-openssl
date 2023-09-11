@@ -1,3 +1,7 @@
+# 4.2.1 / 2023-09-11
+
+  * Fix panic when reading incomplete blocks from underlying reader (#27)
+
 # 4.2.0 / 2023-08-22
 
   * Add support for stream writer and reader (#26)

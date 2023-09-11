@@ -36,7 +36,7 @@ func NewReader(r io.Reader, passphrase string, cg CredsGenerator) *DecryptReader
 func (d *DecryptReader) Read(b []byte) (int, error) {
 	if d.mode == nil {
 		if err := d.initMode(); err != nil {
-			return 0, fmt.Errorf("init failed: %w", err)
+			return 0, fmt.Errorf("initializing mode: %w", err)
 		}
 	}
 
@@ -47,7 +47,7 @@ func (d *DecryptReader) Read(b []byte) (int, error) {
 
 	// write original data to buffer first
 	if _, err := d.buf.Write(b[:n]); err != nil {
-		return 0, fmt.Errorf("write bytes to buf failed: %w", err)
+		return 0, fmt.Errorf("writing bytes to buffer: %w", err)
 	}
 
 	realSize := len(b)
@@ -74,7 +74,7 @@ func (d *DecryptReader) Read(b []byte) (int, error) {
 	// an io.EOF error. If it does we need to remove the PKCS7 padding.
 	if _, err := d.r.Peek(aes.BlockSize); errors.Is(err, io.EOF) {
 		if _, err := io.Copy(&d.buf, d.r); err != nil {
-			return size, fmt.Errorf("copy remain data to buf failed: %w", err)
+			return size, fmt.Errorf("copying remaining data to buffer: %w", err)
 		}
 
 		if d.buf.Len() == 0 {
@@ -100,11 +100,11 @@ func (d *DecryptReader) initMode() error {
 
 	saltHeader := make([]byte, aes.BlockSize)
 	if _, err := io.ReadFull(d.r, saltHeader); err != nil {
-		return fmt.Errorf("read salt header failed: %w", err)
+		return fmt.Errorf("reading salt header: %w", err)
 	}
 
-	if string(saltHeader[:8]) != "Salted__" {
-		return fmt.Errorf("does not appear to have been encrypted with OpenSSL, salt header missing")
+	if string(saltHeader[:8]) != opensslSaltHeader {
+		return fmt.Errorf("missing OpenSSL salt-header")
 	}
 
 	salt := saltHeader[8:]
@@ -116,7 +116,7 @@ func (d *DecryptReader) initMode() error {
 
 	c, err := aes.NewCipher(creds.Key)
 	if err != nil {
-		return fmt.Errorf("new aes cipher failed: %w", err)
+		return fmt.Errorf("creating new AES cipher: %w", err)
 	}
 	d.mode = cipher.NewCBCDecrypter(c, creds.IV)
 	return nil
@@ -160,13 +160,13 @@ func (e *EncryptWriter) Write(b []byte) (int, error) {
 
 	if e.buf != nil {
 		if _, err := buf.Write(e.buf); err != nil {
-			return 0, fmt.Errorf("write last remain data to buf failed: %w", err)
+			return 0, fmt.Errorf("writing remaining data to buffer: %w", err)
 		}
 		e.buf = nil
 	}
 
 	if _, err := buf.Write(b); err != nil {
-		return 0, fmt.Errorf("write current data to buf failed: %w", err)
+		return 0, fmt.Errorf("writing current data to buffer: %w", err)
 	}
 
 	size := (buf.Len() / aes.BlockSize) * aes.BlockSize
@@ -183,7 +183,7 @@ func (e *EncryptWriter) Write(b []byte) (int, error) {
 
 	n, err := e.w.Write(buf.Bytes()[:size])
 	if err != nil {
-		return n, fmt.Errorf("write encrypted data to underlying writer failed: %w", err)
+		return n, fmt.Errorf("writing encrypted data to underlying writer: %w", err)
 	}
 
 	return originSize, nil
@@ -204,7 +204,7 @@ func (e *EncryptWriter) Close() error {
 	e.mode.CryptBlocks(pad, pad)
 
 	if _, err := e.w.Write(pad); err != nil {
-		return fmt.Errorf("write padding to underlying writer failed: %w", err)
+		return fmt.Errorf("writing padding to underlying writer: %w", err)
 	}
 
 	return nil
@@ -218,12 +218,12 @@ func (e *EncryptWriter) initMode() error {
 	salt := make([]byte, opensslSaltLength) // Generate an 8 byte salt
 	_, err := io.ReadFull(rand.Reader, salt)
 	if err != nil {
-		return fmt.Errorf("read salt failed: %w", err)
+		return fmt.Errorf("reading salt: %w", err)
 	}
 
-	_, err = e.w.Write(append([]byte("Salted__"), salt...))
+	_, err = e.w.Write(append([]byte(opensslSaltHeader), salt...))
 	if err != nil {
-		return fmt.Errorf("write salt to underlying writer failed: %w", err)
+		return fmt.Errorf("writing salt to underlying writer: %w", err)
 	}
 
 	creds, err := e.cg(e.passphrase, salt)
@@ -233,7 +233,7 @@ func (e *EncryptWriter) initMode() error {
 
 	c, err := aes.NewCipher(creds.Key)
 	if err != nil {
-		return fmt.Errorf("new aes cipher failed: %w", err)
+		return fmt.Errorf("creating new AES cipher: %w", err)
 	}
 	e.mode = cipher.NewCBCEncrypter(c, creds.IV)
 	return nil

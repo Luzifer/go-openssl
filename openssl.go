@@ -13,7 +13,10 @@ import (
 	"io"
 )
 
-const opensslSaltLength = 8
+const (
+	opensslSaltHeader = "Salted__" // OpenSSL salt is always this string + 8 bytes of actual salt
+	opensslSaltLength = 8
+)
 
 // ErrInvalidSalt is returned when a salt with a length of != 8 byte is passed
 var ErrInvalidSalt = errors.New("salt needs to have exactly 8 byte")
@@ -58,7 +61,7 @@ func (o Creds) equals(i Creds) bool {
 // New instanciates and initializes a new OpenSSL encrypter
 func New() *OpenSSL {
 	return &OpenSSL{
-		openSSLSaltHeader: "Salted__", // OpenSSL salt is always this string + 8 bytes of actual salt
+		openSSLSaltHeader: opensslSaltHeader,
 	}
 }
 

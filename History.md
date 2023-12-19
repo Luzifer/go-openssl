@@ -1,3 +1,7 @@
+# 4.2.2 / 2023-12-19
+
+  * Update dependencies
+
 # 4.2.1 / 2023-09-11
 
   * Fix panic when reading incomplete blocks from underlying reader (#27)

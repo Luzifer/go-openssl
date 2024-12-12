@@ -1,3 +1,7 @@
+# 4.2.4 / 2024-12-12
+
+  * Update linter config, increase supported Go version
+
 # 4.2.3 / 2024-12-12
 
   * Update `golang.org/x/crypto`

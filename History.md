@@ -1,3 +1,7 @@
+# 4.2.3 / 2024-12-12
+
+  * Update `golang.org/x/crypto`
+
 # 4.2.2 / 2023-12-19
 
   * Update dependencies

@@ -18,22 +18,24 @@ const (
 	opensslSaltLength = 8
 )
 
+type (
+	// OpenSSL is a helper to generate OpenSSL compatible encryption
+	// with autmatic IV derivation and storage. As long as the key is known all
+	// data can also get decrypted using OpenSSL CLI.
+	// Code from http://dequeue.blogspot.de/2014/11/decrypting-something-encrypted-with.html
+	OpenSSL struct {
+		openSSLSaltHeader string
+	}
+
+	// Creds holds a key and an IV for encryption methods
+	Creds struct {
+		Key []byte
+		IV  []byte
+	}
+)
+
 // ErrInvalidSalt is returned when a salt with a length of != 8 byte is passed
 var ErrInvalidSalt = errors.New("salt needs to have exactly 8 byte")
-
-// OpenSSL is a helper to generate OpenSSL compatible encryption
-// with autmatic IV derivation and storage. As long as the key is known all
-// data can also get decrypted using OpenSSL CLI.
-// Code from http://dequeue.blogspot.de/2014/11/decrypting-something-encrypted-with.html
-type OpenSSL struct {
-	openSSLSaltHeader string
-}
-
-// Creds holds a key and an IV for encryption methods
-type Creds struct {
-	Key []byte
-	IV  []byte
-}
 
 func (o Creds) equals(i Creds) bool {
 	// If lengths does not match no chance they are equal
@@ -65,6 +67,29 @@ func New() *OpenSSL {
 	}
 }
 
+// DecryptBinaryBytes takes a slice of binary bytes, encrypted data to decrypt
+// and a key-derivation function. The key-derivation function must match the function
+// used to encrypt the data. (In OpenSSL the value of the `-md` parameter.)
+//
+// You should not just try to loop the digest functions as this will cause a race
+// condition and you will not be able to decrypt your data properly.
+func (o OpenSSL) DecryptBinaryBytes(passphrase string, encryptedData []byte, cg CredsGenerator) ([]byte, error) {
+	if len(encryptedData) < aes.BlockSize {
+		return nil, fmt.Errorf("data too short")
+	}
+	saltHeader := encryptedData[:aes.BlockSize]
+	if string(saltHeader[:opensslSaltLength]) != o.openSSLSaltHeader {
+		return nil, fmt.Errorf("does not appear to have been encrypted with OpenSSL, salt header missing")
+	}
+	salt := saltHeader[opensslSaltLength:]
+
+	creds, err := cg([]byte(passphrase), salt)
+	if err != nil {
+		return nil, err
+	}
+	return o.decrypt(creds.Key, creds.IV, encryptedData)
+}
+
 // DecryptBytes takes a slice of bytes with base64 encoded, encrypted data to decrypt
 // and a key-derivation function. The key-derivation function must match the function
 // used to encrypt the data. (In OpenSSL the value of the `-md` parameter.)
@@ -88,58 +113,6 @@ func (o OpenSSL) DecryptBytes(passphrase string, encryptedBase64Data []byte, cg 
 	return decrypted, nil
 }
 
-// DecryptBinaryBytes takes a slice of binary bytes, encrypted data to decrypt
-// and a key-derivation function. The key-derivation function must match the function
-// used to encrypt the data. (In OpenSSL the value of the `-md` parameter.)
-//
-// You should not just try to loop the digest functions as this will cause a race
-// condition and you will not be able to decrypt your data properly.
-func (o OpenSSL) DecryptBinaryBytes(passphrase string, encryptedData []byte, cg CredsGenerator) ([]byte, error) {
-	if len(encryptedData) < aes.BlockSize {
-		return nil, fmt.Errorf("data too short")
-	}
-	saltHeader := encryptedData[:aes.BlockSize]
-	if string(saltHeader[:8]) != o.openSSLSaltHeader {
-		return nil, fmt.Errorf("does not appear to have been encrypted with OpenSSL, salt header missing")
-	}
-	salt := saltHeader[8:]
-
-	creds, err := cg([]byte(passphrase), salt)
-	if err != nil {
-		return nil, err
-	}
-	return o.decrypt(creds.Key, creds.IV, encryptedData)
-}
-
-func (o OpenSSL) decrypt(key, iv, data []byte) ([]byte, error) {
-	if len(data) == 0 || len(data)%aes.BlockSize != 0 {
-		return nil, fmt.Errorf("bad blocksize(%v), aes.BlockSize = %v", len(data), aes.BlockSize)
-	}
-	c, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, fmt.Errorf("creating AES cipher: %w", err)
-	}
-	cbc := cipher.NewCBCDecrypter(c, iv)
-	cbc.CryptBlocks(data[aes.BlockSize:], data[aes.BlockSize:])
-	out, err := o.pkcs7Unpad(data[aes.BlockSize:], aes.BlockSize)
-	if out == nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// EncryptBytes encrypts a slice of bytes that are base64 encoded in a manner compatible to OpenSSL encryption
-// functions using AES-256-CBC as encryption algorithm. This function generates
-// a random salt on every execution.
-func (o OpenSSL) EncryptBytes(passphrase string, plainData []byte, cg CredsGenerator) ([]byte, error) {
-	salt, err := o.GenerateSalt()
-	if err != nil {
-		return nil, err
-	}
-
-	return o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, plainData, cg)
-}
-
 // EncryptBinaryBytes encrypts a slice of bytes in a manner compatible to OpenSSL encryption
 // functions using AES-256-CBC as encryption algorithm. This function generates
 // a random salt on every execution.
@@ -150,43 +123,6 @@ func (o OpenSSL) EncryptBinaryBytes(passphrase string, plainData []byte, cg Cred
 	}
 
 	return o.EncryptBinaryBytesWithSaltAndDigestFunc(passphrase, salt, plainData, cg)
-}
-
-// EncryptBytesWithSaltAndDigestFunc encrypts a slice of bytes that are base64 encoded in a manner compatible to OpenSSL
-// encryption functions using AES-256-CBC as encryption algorithm. The salt
-// needs to be passed in here which ensures the same result on every execution
-// on cost of a much weaker encryption as with EncryptString.
-//
-// The salt passed into this function needs to have exactly 8 byte.
-//
-// The hash function corresponds to the `-md` parameter of OpenSSL. For OpenSSL pre-1.1.0c
-// DigestMD5Sum was the default, since then it is DigestSHA256Sum.
-//
-// If you don't have a good reason to use this, please don't! For more information
-// see this: https://en.wikipedia.org/wiki/Salt_(cryptography)#Common_mistakes
-func (o OpenSSL) EncryptBytesWithSaltAndDigestFunc(passphrase string, salt, plainData []byte, cg CredsGenerator) ([]byte, error) {
-	enc, err := o.EncryptBinaryBytesWithSaltAndDigestFunc(passphrase, salt, plainData, cg)
-	if err != nil {
-		return nil, err
-	}
-
-	return []byte(base64.StdEncoding.EncodeToString(enc)), nil
-}
-
-func (o OpenSSL) encrypt(key, iv, data []byte) ([]byte, error) {
-	padded, err := o.pkcs7Pad(data, aes.BlockSize)
-	if err != nil {
-		return nil, err
-	}
-
-	c, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, fmt.Errorf("creating AES cipher: %w", err)
-	}
-	cbc := cipher.NewCBCEncrypter(c, iv)
-	cbc.CryptBlocks(padded[aes.BlockSize:], padded[aes.BlockSize:])
-
-	return padded, nil
 }
 
 // EncryptBinaryBytesWithSaltAndDigestFunc encrypts a slice of bytes in a manner compatible to OpenSSL
@@ -224,6 +160,39 @@ func (o OpenSSL) EncryptBinaryBytesWithSaltAndDigestFunc(passphrase string, salt
 	return enc, nil
 }
 
+// EncryptBytes encrypts a slice of bytes that are base64 encoded in a manner compatible to OpenSSL encryption
+// functions using AES-256-CBC as encryption algorithm. This function generates
+// a random salt on every execution.
+func (o OpenSSL) EncryptBytes(passphrase string, plainData []byte, cg CredsGenerator) ([]byte, error) {
+	salt, err := o.GenerateSalt()
+	if err != nil {
+		return nil, err
+	}
+
+	return o.EncryptBytesWithSaltAndDigestFunc(passphrase, salt, plainData, cg)
+}
+
+// EncryptBytesWithSaltAndDigestFunc encrypts a slice of bytes that are base64 encoded in a manner compatible to OpenSSL
+// encryption functions using AES-256-CBC as encryption algorithm. The salt
+// needs to be passed in here which ensures the same result on every execution
+// on cost of a much weaker encryption as with EncryptString.
+//
+// The salt passed into this function needs to have exactly 8 byte.
+//
+// The hash function corresponds to the `-md` parameter of OpenSSL. For OpenSSL pre-1.1.0c
+// DigestMD5Sum was the default, since then it is DigestSHA256Sum.
+//
+// If you don't have a good reason to use this, please don't! For more information
+// see this: https://en.wikipedia.org/wiki/Salt_(cryptography)#Common_mistakes
+func (o OpenSSL) EncryptBytesWithSaltAndDigestFunc(passphrase string, salt, plainData []byte, cg CredsGenerator) ([]byte, error) {
+	enc, err := o.EncryptBinaryBytesWithSaltAndDigestFunc(passphrase, salt, plainData, cg)
+	if err != nil {
+		return nil, err
+	}
+
+	return []byte(base64.StdEncoding.EncodeToString(enc)), nil
+}
+
 // GenerateSalt generates a random 8 byte salt
 func (OpenSSL) GenerateSalt() ([]byte, error) {
 	salt := make([]byte, opensslSaltLength) // Generate an 8 byte salt
@@ -243,6 +212,39 @@ func (o OpenSSL) MustGenerateSalt() []byte {
 		panic(err)
 	}
 	return s
+}
+
+func (o OpenSSL) decrypt(key, iv, data []byte) ([]byte, error) {
+	if len(data) == 0 || len(data)%aes.BlockSize != 0 {
+		return nil, fmt.Errorf("bad blocksize(%v), aes.BlockSize = %v", len(data), aes.BlockSize)
+	}
+	c, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("creating AES cipher: %w", err)
+	}
+	cbc := cipher.NewCBCDecrypter(c, iv)
+	cbc.CryptBlocks(data[aes.BlockSize:], data[aes.BlockSize:])
+	out, err := o.pkcs7Unpad(data[aes.BlockSize:], aes.BlockSize)
+	if out == nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (o OpenSSL) encrypt(key, iv, data []byte) ([]byte, error) {
+	padded, err := o.pkcs7Pad(data, aes.BlockSize)
+	if err != nil {
+		return nil, err
+	}
+
+	c, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("creating AES cipher: %w", err)
+	}
+	cbc := cipher.NewCBCEncrypter(c, iv)
+	cbc.CryptBlocks(padded[aes.BlockSize:], padded[aes.BlockSize:])
+
+	return padded, nil
 }
 
 // pkcs7Pad appends padding.
@@ -272,8 +274,8 @@ func (OpenSSL) pkcs7Unpad(data []byte, blocklen int) ([]byte, error) {
 		return nil, fmt.Errorf("invalid padding")
 	}
 	pad := data[len(data)-padlen:]
-	for i := 0; i < padlen; i++ {
-		if pad[i] != byte(padlen) {
+	for i := range padlen {
+		if pad[i] != byte(padlen) { //#nosec:G115 // derived from byte, safe to convert to byte
 			return nil, fmt.Errorf("invalid padding")
 		}
 	}

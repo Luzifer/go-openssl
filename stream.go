@@ -11,15 +11,26 @@ import (
 	"io"
 )
 
-// DecryptReader represents an io.Reader for OpenSSL encrypted data
-type DecryptReader struct {
-	r          *bufio.Reader
-	mode       cipher.BlockMode
-	cg         CredsGenerator
-	passphrase []byte
+type (
+	// DecryptReader represents an io.Reader for OpenSSL encrypted data
+	DecryptReader struct {
+		r          *bufio.Reader
+		mode       cipher.BlockMode
+		cg         CredsGenerator
+		passphrase []byte
 
-	buf bytes.Buffer
-}
+		buf bytes.Buffer
+	}
+
+	// EncryptWriter represents an io.WriteCloser info OpenSSL encrypted data
+	EncryptWriter struct {
+		mode       cipher.BlockMode
+		w          io.Writer
+		cg         CredsGenerator
+		passphrase []byte
+		buf        []byte
+	}
+)
 
 // NewReader creates a new OpenSSL stream reader with underlying reader,
 // passphrase and CredsGenerator
@@ -50,10 +61,7 @@ func (d *DecryptReader) Read(b []byte) (int, error) {
 		return 0, fmt.Errorf("writing bytes to buffer: %w", err)
 	}
 
-	realSize := len(b)
-	if d.buf.Len() < realSize {
-		realSize = d.buf.Len()
-	}
+	realSize := min(d.buf.Len(), len(b))
 
 	size := (realSize / aes.BlockSize) * aes.BlockSize
 
@@ -103,11 +111,11 @@ func (d *DecryptReader) initMode() error {
 		return fmt.Errorf("reading salt header: %w", err)
 	}
 
-	if string(saltHeader[:8]) != opensslSaltHeader {
+	if string(saltHeader[:opensslSaltLength]) != opensslSaltHeader {
 		return fmt.Errorf("missing OpenSSL salt-header")
 	}
 
-	salt := saltHeader[8:]
+	salt := saltHeader[opensslSaltLength:]
 
 	creds, err := d.cg(d.passphrase, salt)
 	if err != nil {
@@ -122,15 +130,6 @@ func (d *DecryptReader) initMode() error {
 	return nil
 }
 
-// EncryptWriter represents an io.WriteCloser info OpenSSL encrypted data
-type EncryptWriter struct {
-	mode       cipher.BlockMode
-	w          io.Writer
-	cg         CredsGenerator
-	passphrase []byte
-	buf        []byte
-}
-
 // NewWriter create new openssl stream writer with underlying writer,
 // passphrase and CredsGenerator.
 //
@@ -142,6 +141,27 @@ func NewWriter(w io.Writer, passphrase string, cg CredsGenerator) *EncryptWriter
 		cg:         cg,
 		passphrase: []byte(passphrase),
 	}
+}
+
+// Close writes any buffered data to the underlying io.Writer.
+// Make sure close the writer after write all data.
+func (e *EncryptWriter) Close() error {
+	padlen := 1
+	for ((len(e.buf) + padlen) % aes.BlockSize) != 0 {
+		padlen++
+	}
+
+	pad := bytes.Repeat([]byte{byte(padlen)}, padlen)
+	pad = append(e.buf, pad...)
+
+	e.buf = nil
+	e.mode.CryptBlocks(pad, pad)
+
+	if _, err := e.w.Write(pad); err != nil {
+		return fmt.Errorf("writing padding to underlying writer: %w", err)
+	}
+
+	return nil
 }
 
 // Write implements io.WriteCloser to write encrypted data into the
@@ -187,27 +207,6 @@ func (e *EncryptWriter) Write(b []byte) (int, error) {
 	}
 
 	return originSize, nil
-}
-
-// Close writes any buffered data to the underlying io.Writer.
-// Make sure close the writer after write all data.
-func (e *EncryptWriter) Close() error {
-	padlen := 1
-	for ((len(e.buf) + padlen) % aes.BlockSize) != 0 {
-		padlen++
-	}
-
-	pad := bytes.Repeat([]byte{byte(padlen)}, padlen)
-	pad = append(e.buf, pad...)
-
-	e.buf = nil
-	e.mode.CryptBlocks(pad, pad)
-
-	if _, err := e.w.Write(pad); err != nil {
-		return fmt.Errorf("writing padding to underlying writer: %w", err)
-	}
-
-	return nil
 }
 
 func (e *EncryptWriter) initMode() error {

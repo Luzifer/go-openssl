@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	testPassphrase = "z4yH36a6zerhfE5427ZV" //#nosec G101 -- Is hardcoded passphrase but only for testing purposes
+	testPassphrase = "z4yH36a6zerhfE5427ZV" //#nosec:G101 // Is hardcoded passphrase but only for testing purposes
 	testPlaintext  = "hallowelt"
 )
 
@@ -85,7 +85,7 @@ func TestBinaryEncryptToOpenSSL(t *testing.T) {
 				cmdArgs = append(cmdArgs, "-pbkdf2")
 			}
 
-			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...) //#nosec:G204 -- Hardcoded tests, this is fine
+			cmd := exec.CommandContext(t.Context(), cmdArgs[0], cmdArgs[1:]...) //#nosec:G204 // Hardcoded tests, this is fine
 
 			var out bytes.Buffer
 			cmd.Stdout = &out
@@ -133,7 +133,7 @@ func TestDecryptBinaryFromString(t *testing.T) {
 				cmdArgs = append(cmdArgs, "-pbkdf2")
 			}
 
-			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...) //#nosec:G204 -- Hardcoded tests, this is fine
+			cmd := exec.CommandContext(t.Context(), cmdArgs[0], cmdArgs[1:]...) //#nosec:G204 // Hardcoded tests, this is fine
 			cmd.Stdout = &out
 			cmd.Stdin = strings.NewReader(testPlaintext)
 
@@ -167,7 +167,7 @@ func TestDecryptFromString(t *testing.T) {
 				cmdArgs = append(cmdArgs, "-pbkdf2")
 			}
 
-			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...) //#nosec:G204 -- Hardcoded tests, this is fine
+			cmd := exec.CommandContext(t.Context(), cmdArgs[0], cmdArgs[1:]...) //#nosec:G204 // Hardcoded tests, this is fine
 			cmd.Stdout = &out
 			cmd.Stdin = strings.NewReader(testPlaintext)
 
@@ -236,7 +236,7 @@ func TestEncryptToOpenSSL(t *testing.T) {
 				cmdArgs = append(cmdArgs, "-pbkdf2")
 			}
 
-			cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...) //#nosec:G204 -- Hardcoded tests, this is fine
+			cmd := exec.CommandContext(t.Context(), cmdArgs[0], cmdArgs[1:]...) //#nosec:G204 // Hardcoded tests, this is fine
 			cmd.Stdout = &out
 			cmd.Stdin = bytes.NewReader(enc)
 
@@ -264,18 +264,16 @@ func TestEncryptWithSaltShouldHaveSameOutput(t *testing.T) {
 }
 
 func TestGenerateSalt(t *testing.T) {
-	knownSalts := [][]byte{}
+	var knownSalts [][]byte
 
 	o := New()
 
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		salt, err := o.GenerateSalt()
 		require.NoError(t, err)
 
-		for _, ks := range knownSalts {
-			assert.NotEqual(t, ks, salt)
-			knownSalts = append(knownSalts, salt)
-		}
+		assert.NotContains(t, knownSalts, salt)
+		knownSalts = append(knownSalts, salt)
 	}
 }
 
@@ -284,20 +282,21 @@ func TestSaltValidation(t *testing.T) {
 	o := New()
 
 	_, err = o.EncryptBytesWithSaltAndDigestFunc(testPassphrase, []byte("12345"), []byte(testPlaintext), BytesToKeySHA256)
-	assert.ErrorIs(t, err, ErrInvalidSalt)
+	require.ErrorIs(t, err, ErrInvalidSalt)
 
 	_, err = o.EncryptBytesWithSaltAndDigestFunc(testPassphrase, []byte("1234567890"), []byte(testPlaintext), BytesToKeySHA256)
-	assert.ErrorIs(t, err, ErrInvalidSalt)
+	require.ErrorIs(t, err, ErrInvalidSalt)
 
 	_, err = o.EncryptBytesWithSaltAndDigestFunc(testPassphrase, []byte{0xcb, 0xd5, 0x1a, 0x3, 0x84, 0xba, 0xa8, 0xc8}, []byte(testPlaintext), BytesToKeySHA256)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 //
 // Benchmarks
 //
 
-func benchmarkDecrypt(ciphertext []byte, cg CredsGenerator, b *testing.B) {
+func benchmarkDecrypt(b *testing.B, ciphertext []byte, cg CredsGenerator) {
+	b.Helper()
 	o := New()
 
 	for n := 0; n < b.N; n++ {
@@ -307,18 +306,19 @@ func benchmarkDecrypt(ciphertext []byte, cg CredsGenerator, b *testing.B) {
 }
 
 func BenchmarkDecryptMD5(b *testing.B) {
-	benchmarkDecrypt([]byte("U2FsdGVkX19ZM5qQJGe/d5A/4pccgH+arBGTp+QnWPU="), BytesToKeyMD5, b)
+	benchmarkDecrypt(b, []byte("U2FsdGVkX19ZM5qQJGe/d5A/4pccgH+arBGTp+QnWPU="), BytesToKeyMD5)
 }
 
 func BenchmarkDecryptSHA1(b *testing.B) {
-	benchmarkDecrypt([]byte("U2FsdGVkX1/Yy9kegseq2Ewd4UvjFYCpIEA1cltTA1Q="), BytesToKeySHA1, b)
+	benchmarkDecrypt(b, []byte("U2FsdGVkX1/Yy9kegseq2Ewd4UvjFYCpIEA1cltTA1Q="), BytesToKeySHA1)
 }
 
 func BenchmarkDecryptSHA256(b *testing.B) {
-	benchmarkDecrypt([]byte("U2FsdGVkX1+O68d7BO9ibP8nB5+xtb/27IHlyjJWpl8="), BytesToKeySHA256, b)
+	benchmarkDecrypt(b, []byte("U2FsdGVkX1+O68d7BO9ibP8nB5+xtb/27IHlyjJWpl8="), BytesToKeySHA256)
 }
 
-func benchmarkEncrypt(plaintext string, cg CredsGenerator, b *testing.B) {
+func benchmarkEncrypt(b *testing.B, plaintext string, cg CredsGenerator) {
+	b.Helper()
 	o := New()
 	salt, _ := o.GenerateSalt()
 
@@ -329,15 +329,15 @@ func benchmarkEncrypt(plaintext string, cg CredsGenerator, b *testing.B) {
 }
 
 func BenchmarkEncryptMD5(b *testing.B) {
-	benchmarkEncrypt(testPlaintext, BytesToKeyMD5, b)
+	benchmarkEncrypt(b, testPlaintext, BytesToKeyMD5)
 }
 
 func BenchmarkEncryptSHA1(b *testing.B) {
-	benchmarkEncrypt(testPlaintext, BytesToKeySHA1, b)
+	benchmarkEncrypt(b, testPlaintext, BytesToKeySHA1)
 }
 
 func BenchmarkEncryptSHA256(b *testing.B) {
-	benchmarkEncrypt(testPlaintext, BytesToKeySHA256, b)
+	benchmarkEncrypt(b, testPlaintext, BytesToKeySHA256)
 }
 
 func BenchmarkGenerateSalt(b *testing.B) {

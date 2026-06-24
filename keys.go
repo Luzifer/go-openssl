@@ -1,8 +1,8 @@
 package openssl
 
 import (
-	"crypto/md5"  //#nosec G501 -- Used for OpenSSL compatibility in old KDF
-	"crypto/sha1" //#nosec G505 -- Used for OpenSSL compatibility in old KDF
+	"crypto/md5"  //#nosec:G501 // Used for OpenSSL compatibility in old KDF
+	"crypto/sha1" //#nosec:G505 // Used for OpenSSL compatibility in old KDF
 	"crypto/sha256"
 	"crypto/sha512"
 	"fmt"
@@ -67,8 +67,10 @@ func NewBytesToKeyGenerator(hashFunc func() hash.Hash) CredsGenerator {
 	}
 
 	return func(password, salt []byte) (Creds, error) {
-		var m []byte
-		prev := []byte{}
+		var (
+			m    []byte
+			prev []byte
+		)
 		for len(m) < opensslKeyLength+opensslIVLength {
 			a := make([]byte, len(prev)+len(password)+len(salt))
 			copy(a, prev)

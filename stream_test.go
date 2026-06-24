@@ -21,7 +21,7 @@ func (o *limitedSizeReader) Read(b []byte) (int, error) {
 		return 0, nil
 	}
 
-	return o.r.Read(b[:o.size]) //nolint:wrapcheck
+	return o.r.Read(b[:o.size]) //nolint:wrapcheck // only a test-reader, keep it simple
 }
 
 func TestReader(t *testing.T) {

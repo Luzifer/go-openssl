@@ -1,0 +1,28 @@
+name: test
+
+on:
+  push: {}
+
+jobs:
+  test-and-build:
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      CGO_ENABLED: 0
+      GOPATH: /go
+
+    runs-on: forgejo
+
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Lint and test code
+        run: make lint test
+
+      - name: Record benchmark
+        run: make benchmark
+
+      - name: Execute Trivy scan
+        run: make trivy

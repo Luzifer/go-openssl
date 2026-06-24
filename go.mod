@@ -1,10 +1,10 @@
 module github.com/Luzifer/go-openssl/v4
 
-go 1.22
+go 1.25.0
 
 require (
-	github.com/stretchr/testify v1.8.4
-	golang.org/x/crypto v0.31.0
+	github.com/stretchr/testify v1.11.1
+	golang.org/x/crypto v0.53.0
 )
 
 require (

@@ -1,3 +1,10 @@
+# 4.2.5 / 2026-06-24
+
+  * chore: modernize CI
+  * chore: onboard renovate
+  * fix: update dependencies
+  * refactor: resolve linter errors
+
 # 4.2.4 / 2024-12-12
 
   * Update linter config, increase supported Go version

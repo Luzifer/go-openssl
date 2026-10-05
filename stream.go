@@ -146,6 +146,14 @@ func NewWriter(w io.Writer, passphrase string, cg CredsGenerator) *EncryptWriter
 // Close writes any buffered data to the underlying io.Writer.
 // Make sure close the writer after write all data.
 func (e *EncryptWriter) Close() error {
+	if e.mode == nil {
+		// Nothing was written yet; still emit a valid OpenSSL empty payload
+		// (salt header + one padding block) instead of nil-pointer panicking.
+		if err := e.initMode(); err != nil {
+			return err
+		}
+	}
+
 	padlen := 1
 	for ((len(e.buf) + padlen) % aes.BlockSize) != 0 {
 		padlen++

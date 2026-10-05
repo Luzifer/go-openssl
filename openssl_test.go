@@ -347,3 +347,23 @@ func BenchmarkGenerateSalt(b *testing.B) {
 		require.NoError(b, err)
 	}
 }
+
+func TestDecryptBinaryBytesDoesNotMutateInput(t *testing.T) {
+	o := New()
+	plain := []byte("do-not-clobber-ciphertext")
+	enc, err := o.EncryptBinaryBytes(testPassphrase, plain, BytesToKeySHA256)
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	original := append([]byte(nil), enc...)
+	dec, err := o.DecryptBinaryBytes(testPassphrase, enc, BytesToKeySHA256)
+	if err != nil {
+		t.Fatalf("decrypt: %v", err)
+	}
+	if string(dec) != string(plain) {
+		t.Fatalf("plain mismatch: got %q want %q", dec, plain)
+	}
+	if !bytes.Equal(enc, original) {
+		t.Fatalf("DecryptBinaryBytes mutated the input ciphertext")
+	}
+}

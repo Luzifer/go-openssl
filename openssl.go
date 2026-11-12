@@ -222,9 +222,12 @@ func (o OpenSSL) decrypt(key, iv, data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("creating AES cipher: %w", err)
 	}
+	// Copy ciphertext so DecryptBinaryBytes does not mutate the caller's buffer.
+	buf := make([]byte, len(data)-aes.BlockSize)
+	copy(buf, data[aes.BlockSize:])
 	cbc := cipher.NewCBCDecrypter(c, iv)
-	cbc.CryptBlocks(data[aes.BlockSize:], data[aes.BlockSize:])
-	out, err := o.pkcs7Unpad(data[aes.BlockSize:], aes.BlockSize)
+	cbc.CryptBlocks(buf, buf)
+	out, err := o.pkcs7Unpad(buf, aes.BlockSize)
 	if out == nil {
 		return nil, err
 	}

@@ -66,3 +66,19 @@ func TestWriter(t *testing.T) {
 
 	require.Equal(t, da, plaintext)
 }
+
+func TestEncryptWriterCloseWithoutWrite(t *testing.T) {
+	o := New()
+	var buf bytes.Buffer
+	w := NewWriter(&buf, testPassphrase, BytesToKeySHA256)
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close without Write: %v", err)
+	}
+	dec, err := o.DecryptBinaryBytes(testPassphrase, buf.Bytes(), BytesToKeySHA256)
+	if err != nil {
+		t.Fatalf("decrypt empty payload: %v", err)
+	}
+	if len(dec) != 0 {
+		t.Fatalf("expected empty plaintext, got %q", dec)
+	}
+}
